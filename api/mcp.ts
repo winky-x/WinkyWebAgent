@@ -1,19 +1,19 @@
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { createMcpHandler } from "mcp-handler";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
-// 1. Initialize Supabase (Using Vercel Env Vars)
+// 1. Initialize Supabase
 const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.SUPABASE_URL || '',
+  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 );
 
-// 2. Define the MCP Server
-const server = new Server(
-  { name: "winky-web-agent", version: "1.0.0" },
-  { capabilities: { tools: {} } }
-);
+// 2. Define the McpServer (Note the change from 'Server' to 'McpServer')
+const server = new McpServer({
+  name: "winky-web-agent",
+  version: "1.0.0",
+});
 
 // 3. Define the Web Agent Tool
 server.tool(
@@ -28,7 +28,7 @@ server.tool(
   async ({ action, url, selector, text }) => {
     const jobId = Math.random().toString(36).substring(7);
     
-    // Broadcast the command to your Chrome Extension via Supabase
+    // Broadcast to Supabase
     await supabase.channel('browser-actions').send({
       type: 'broadcast',
       event: 'action',
