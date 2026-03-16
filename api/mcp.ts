@@ -1,7 +1,6 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { createMcpHandler } from "mcp-handler";
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { createClient } from "@supabase/supabase-js";
-import { z } from "zod";
 
 // 1. Initialize Supabase
 const supabase = createClient(
@@ -9,34 +8,43 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 );
 
-// 2. Wrap the server logic in a function for mcp-handler
-const handler = createMcpHandler(async (server: McpServer) => {
-  // Define the Web Agent Tool inside the setup function
-  server.tool(
-    "web_agent",
-    "Controls a browser via Chrome Extension + Supabase",
-    {
-      action: z.enum(["navigate", "click", "type"]),
-      url: z.string().optional(),
-      selector: z.string().optional(),
-      text: z.string().optional(),
-    },
-    async ({ action, url, selector, text }) => {
-      const jobId = Math.random().toString(36).substring(7);
-      
-      // Broadcast to Supabase
-      await supabase.channel('browser-actions').send({
-        type: 'broadcast',
-        event: 'action',
-        payload: { jobId, action, url, selector, text }
-      });
+// 2. Create the Server
+const server = new Server(
+  { name: "winky-web-agent", version: "1.0.0" },
+  { capabilities: { tools: {} } }
+);
 
-      return {
-        content:
-      };
-    }
-  );
-});
+// 3. Define the Tool (Simplified for TS stability)
+server.tool(
+  "web_agent",
+  "Controls browser via Supabase",
+  async (args: any) => {
+    const jobId = Math.random().toString(36).substring(7);
+    
+    await supabase.channel('browser-actions').send({
+      type: 'broadcast',
+      event: 'action',
+      payload: { jobId, ...args }
+    });
 
-// 3. Export the Vercel Handler
-export { handler as GET, handler as POST };
+    return {
+      content:
+    };
+  }
+);
+
+// 4. THE VERCEL HANDLER (Direct SSE)
+export default async function handler(req: any, res: any) {
+  if (req.method === 'GET') {
+    const transport = new SSEServerTransport("/api/mcp", res);
+    await server.connect(transport);
+  } else if (req.method === 'POST') {
+    // This handles the incoming tool calls from the AI
+    const transport = new SSEServerTransport("/api/mcp", res);
+    // @ts-ignore
+    await server.connect(transport);
+    // @ts-ignore
+    await transport.handlePostMessage(req, res);
+  }
+}
+
