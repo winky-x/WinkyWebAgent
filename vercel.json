@@ -7,8 +7,12 @@
   },
   "routes": [
     {
-      "src": "/(.*)",
+      "src": "/api/mcp/(.*)",
       "dest": "api/mcp.ts"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
     }
   ]
 }
