@@ -1,117 +1,114 @@
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
-import { createClient } from "@supabase/supabase-js";
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 
-// 1. Initialize Supabase
-const supabase = createClient(
-  process.env.SUPABASE_URL || '',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-);
+export class MCPClient {
+  private client: Client;
+  private transport: SSEClientTransport | null = null;
+  private tools: Map<string, any> = new Map();
+  private connectionPromise: Promise<boolean> | null = null;
 
-// 2. Create the Server
-const server = new Server(
-  { name: "winky-web-agent", version: "1.0.0" },
-  { capabilities: { tools: {} } }
-);
-
-// 3. Register Tools
-server.setRequestHandler({ method: "tools/list" }, async () => ({
-  tools: [
-    {
-      name: "web_agent",
-      description: "Execute web browser automation tasks",
-      inputSchema: {
-        type: "object",
-        properties: {
-          url: { type: "string", description: "The URL to navigate to" },
-          action: { type: "string", description: "The action to perform" },
-          selector: { type: "string", description: "CSS selector for element" },
-          value: { type: "string", description: "Value to input" }
-        },
-        required: ["url", "action"]
-      }
-    }
-  ]
-}));
-
-// 4. Handle Tool Calls
-server.setRequestHandler({ method: "tools/call" }, async (request) => {
-  const { name, arguments: args } = request.params;
-  
-  if (name === "web_agent") {
-    const jobId = Math.random().toString(36).substring(7);
-    
-    // Store job in Supabase
-    await supabase
-      .from('jobs')
-      .insert({
-        id: jobId,
-        status: 'pending',
-        args: args
-      });
-
-    // Broadcast to browser clients
-    await supabase.channel('browser-actions').send({
-      type: 'broadcast',
-      event: 'action',
-      payload: { jobId, ...args }
-    });
-
-    return {
-      content: [
-        {
-          type: "text",
-          text: `Job submitted successfully with ID: ${jobId}`
-        }
-      ]
-    };
-  }
-  
-  return { 
-    isError: true, 
-    content: [
+  constructor() {
+    this.client = new Client(
       {
-        type: "text",
-        text: `Unknown tool: ${name}`
+        name: "winky-web-agent-client",
+        version: "1.0.0",
+      },
+      {
+        capabilities: {},
       }
-    ]
-  };
-});
-
-// 5. The Vercel Handler
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  console.log('MCP handler called', { 
-    method: req.method, 
-    url: req.url,
-    headers: req.headers 
-  });
-
-  // Set CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  
-  // Handle preflight
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+    );
   }
 
-  try {
-    const transport = new SSEServerTransport("/api/mcp", res);
-    await server.connect(transport);
-    
-    if (req.method === 'POST') {
-      await transport.handlePostMessage(req, res);
-    } else if (req.method === 'GET') {
-      // SSE connection
-      console.log('SSE connection established');
+  async connect(): Promise<boolean> {
+    if (this.connectionPromise) {
+      return this.connectionPromise;
     }
-  } catch (error) {
-    console.error('Error in MCP handler:', error);
-    res.status(500).json({ 
-      error: 'Internal server error',
-      message: error instanceof Error ? error.message : 'Unknown error'
-    });
+
+    if (this.transport && this.tools.size > 0) {
+      return true;
+    }
+
+    this.connectionPromise = this.doConnect();
+    try {
+      const result = await this.connectionPromise;
+      return result;
+    } finally {
+      this.connectionPromise = null;
+    }
+  }
+
+  private async doConnect(): Promise<boolean> {
+    try {
+      const serverUrl = process.env.NODE_ENV === 'development'
+        ? 'http://localhost:3000/api/mcp'
+        : '/api/mcp';
+
+      console.log('Connecting to MCP server at:', serverUrl);
+      
+      this.transport = new SSEClientTransport(new URL(serverUrl));
+      await this.client.connect(this.transport);
+      
+      const result = await this.client.request(
+        { method: "tools/list" },
+        {}
+      );
+      
+      this.tools.clear();
+      if (result.tools) {
+        result.tools.forEach((tool: any) => {
+          this.tools.set(tool.name, tool);
+        });
+        console.log('Available MCP tools:', Array.from(this.tools.keys()));
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Failed to connect to MCP server:', error);
+      this.transport = null;
+      return false;
+    }
+  }
+
+  async callTool(toolName: string, args: any) {
+    const connected = await this.connect();
+    if (!connected) {
+      throw new Error('MCP server not available');
+    }
+
+    if (!this.tools.has(toolName)) {
+      throw new Error(`Tool ${toolName} not available`);
+    }
+
+    const result = await this.client.request(
+      {
+        method: "tools/call",
+        params: {
+          name: toolName,
+          arguments: args
+        }
+      },
+      {}
+    );
+
+    return result;
+  }
+
+  async disconnect() {
+    if (this.transport) {
+      await this.transport.close();
+      this.transport = null;
+    }
+    this.tools.clear();
+    this.connectionPromise = null;
+  }
+
+  getAvailableTools() {
+    return Array.from(this.tools.values());
+  }
+
+  isConnected() {
+    return this.transport !== null && this.tools.size > 0;
   }
 }
+
+export const mcpClient = new MCPClient();
