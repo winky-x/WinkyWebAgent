@@ -1,6 +1,7 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { createClient } from "@supabase/supabase-js";
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 // 1. Initialize Supabase
 const supabase = createClient(
@@ -14,8 +15,7 @@ const server = new Server(
   { capabilities: { tools: {} } }
 );
 
-// 3. Register Tools (The manual way to avoid TS1109)
-// @ts-ignore
+// 3. Register Tools
 server.setRequestHandler({ method: "tools/list" }, async () => ({
   tools: [
     {
@@ -36,7 +36,6 @@ server.setRequestHandler({ method: "tools/list" }, async () => ({
 }));
 
 // 4. Handle Tool Calls
-// @ts-ignore
 server.setRequestHandler({ method: "tools/call" }, async (request) => {
   const { name, arguments: args } = request.params;
   
@@ -81,32 +80,38 @@ server.setRequestHandler({ method: "tools/call" }, async (request) => {
 });
 
 // 5. The Vercel Handler
-export default async function handler(req, res) {
-  // Set CORS headers for SSE
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  console.log('MCP handler called', { 
+    method: req.method, 
+    url: req.url,
+    headers: req.headers 
+  });
+
+  // Set CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   
-  // Handle preflight requests
+  // Handle preflight
   if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
+    return res.status(200).end();
   }
 
   try {
     const transport = new SSEServerTransport("/api/mcp", res);
-    // @ts-ignore
     await server.connect(transport);
     
     if (req.method === 'POST') {
-      // @ts-ignore
       await transport.handlePostMessage(req, res);
     } else if (req.method === 'GET') {
-      // SSE connection is handled by the transport
-      // The transport will keep the connection open
+      // SSE connection
+      console.log('SSE connection established');
     }
   } catch (error) {
     console.error('Error in MCP handler:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ 
+      error: 'Internal server error',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 }
