@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Web Agent Hand",
+  "version": "1.0",
+  "description": "Executes browser actions from AI MCP Server.",
+  "permissions": [
+    "scripting",
+    "activeTab",
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["supabase.js", "content.js"]
+    }
+  ]
+}

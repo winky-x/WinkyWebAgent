@@ -1,0 +1,7 @@
+{
+  "name": "Winky AI Voice Assistant",
+  "description": "A conversational AI voice assistant with real-time communication, web search, image/video analysis, and audio transcription.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
