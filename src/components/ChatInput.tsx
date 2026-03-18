@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Mic, MicOff, Paperclip, Send, Square, Image as ImageIcon, Video, Wrench, Loader2 } from 'lucide-react';
+import { Files,Orbit,Trash2,RefreshCw, Search, Mic, MicOff, Paperclip, ArrowBigUp, Sparkles, BookOpen, Clock, Coins, Loader, Blocks, Globe, Calculator, CloudSun, Eye, Zap, Send, Square, Image as ImageIcon, Video, Wrench, Loader2} from 'lucide-react';
 import { Attachment } from '@/lib/gemini';
 import { toast } from 'sonner';
 
@@ -19,7 +19,7 @@ export function ChatInput({ onSend, disabled, voiceMode, value, onChange, isMute
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [showTools, setShowTools] = useState(false);
-  
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -45,7 +45,7 @@ export function ChatInput({ onSend, disabled, voiceMode, value, onChange, isMute
 
   const startRecording = async () => {
     if (voiceMode) return;
-    
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mediaRecorder = new MediaRecorder(stream);
@@ -77,7 +77,7 @@ export function ChatInput({ onSend, disabled, voiceMode, value, onChange, isMute
             url: URL.createObjectURL(audioBlob),
           },
         ]);
-        
+
         stream.getTracks().forEach(track => track.stop());
         setIsRecording(false);
       };
@@ -99,7 +99,7 @@ export function ChatInput({ onSend, disabled, voiceMode, value, onChange, isMute
 
   const handleSend = () => {
     if (disabled) return;
-    
+
     if (value.trim() || attachments.length > 0) {
       onSend(value, attachments);
       onChange('');
@@ -168,13 +168,56 @@ export function ChatInput({ onSend, disabled, voiceMode, value, onChange, isMute
                   onToolSelect?.(tool.id);
                   setShowTools(false);
                 }}
-                className={`w-full text-left px-3 py-2.5 rounded-xl text-sm transition-all duration-200 ${
-                  selectedTool === tool.id 
-                    ? 'bg-violet-100 text-violet-700 font-semibold' 
-                    : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 font-medium'
-                }`}
+                className={`w-full flex items-center gap-3 text-left px-3 py-2.5 rounded-xl text-sm transition-all duration-200 ${selectedTool === tool.id
+                  ? 'bg-violet-100 text-violet-700 font-semibold'
+                  : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 font-medium'
+                  }`}
               >
-                {tool.label}
+                {/* ICON PLACEHOLDER SYSTEM - DON'T CHANGE SIZES BELOW */}
+                <div className={`flex-shrink-0 p-1 rounded-lg ${selectedTool === tool.id ? 'bg-violet-200/50' : 'bg-zinc-200/50 text-zinc-500'
+                  }`}>
+                  {(() => {
+                    switch (tool.id) {
+                      case '': // Auto (Let AI decide)
+                        return <Sparkles className="w-3.5 h-3.5" />;
+
+                      case 'detailed_google_search':
+                        return <Search className="w-3.5 h-3.5" />;
+
+                      case 'fast_google_search':
+                        return <Zap className="w-3.5 h-3.5" />;
+
+                      case 'get_accurate_weather':
+                        return <CloudSun className="w-3.5 h-3.5" />;
+
+                      case 'read_webpage_content':
+                        return <BookOpen className="w-3.5 h-3.5" />;
+
+                      case 'evaluate_math_expression':
+                        return <Calculator className="w-3.5 h-3.5" />;
+
+                      case 'get_current_time_and_date':
+                        return <Clock className="w-3.5 h-3.5" />;
+
+                      case 'get_crypto_price':
+                        return <Coins className="w-3.5 h-3.5" />;
+
+                      case 'web_agent':
+                        return <Orbit className="w-3.5 h-3.5" />;
+
+                      case 'cleanup_browser':
+                        return <Trash2 className="w-3.5 h-3.5" />;
+
+                      case 'toggle_agent_mode':
+                        return <RefreshCw className="w-3.5 h-3.5" />;
+
+                      default:
+                        return <Wrench className="w-3.5 h-3.5" />;
+                    }
+                  })()}
+                </div>
+
+                <span className="truncate">{tool.label}</span>
               </button>
             ))}
           </div>
@@ -222,21 +265,21 @@ export function ChatInput({ onSend, disabled, voiceMode, value, onChange, isMute
             disabled={disabled}
             title="Attach Media"
           >
-            <Paperclip className="w-5 h-5" />
+            <Files className="w-5 h-5" />
           </button>
-          
+
           {!voiceMode && (
             <button
               onClick={() => setShowTools(!showTools)}
-              className={`p-2.5 rounded-full transition-all duration-200 ${
-                selectedTool 
-                  ? 'text-violet-600 bg-violet-100 hover:bg-violet-200' 
-                  : 'text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100'
-              }`}
+              className={`p-2.5 rounded-full transition-all duration-200 ${selectedTool
+                ? 'text-violet-600 bg-violet-100 ring-2 ring-violet-200'
+                : 'text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100'
+                }`}
               disabled={disabled}
-              title="Select Tool"
+              title="Select AI Capabilities"
             >
-              <Wrench className="w-5 h-5" />
+              {/* Blocks is the 'Agency' choice for AI tools */}
+              <Blocks className="w-5 h-5" />
             </button>
           )}
         </div>
@@ -258,11 +301,10 @@ export function ChatInput({ onSend, disabled, voiceMode, value, onChange, isMute
           {voiceMode ? (
             <button
               onClick={() => onMuteChange(!isMuted)}
-              className={`p-3 rounded-full transition-all duration-300 shadow-sm ${
-                isMuted 
-                  ? 'bg-rose-100 text-rose-600 hover:bg-rose-200' 
-                  : 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200 animate-pulse'
-              }`}
+              className={`p-3 rounded-full transition-all duration-300 shadow-sm ${isMuted
+                ? 'bg-rose-100 text-rose-600 hover:bg-rose-200'
+                : 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200 animate-pulse'
+                }`}
               disabled={disabled}
               title={isMuted ? "Unmute Microphone" : "Mute Microphone"}
             >
@@ -288,20 +330,19 @@ export function ChatInput({ onSend, disabled, voiceMode, value, onChange, isMute
               </button>
             )
           )}
-          
+
           <button
             onClick={handleSend}
             disabled={disabled || (!value.trim() && attachments.length === 0)}
-            className={`p-3 text-white rounded-full transition-all duration-300 shadow-md disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none ${
-              voiceMode 
-                ? 'bg-zinc-900 hover:bg-zinc-800' 
-                : 'bg-violet-600 hover:bg-violet-700'
-            }`}
+            className={`p-3 text-white rounded-full transition-all duration-300 shadow-md disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none ${voiceMode
+              ? 'bg-zinc-900 hover:bg-zinc-800'
+              : 'bg-violet-600 hover:bg-violet-700'
+              }`}
           >
             {disabled ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
+              <Loader className="w-5 h-5 animate-spin" />
             ) : (
-              <Send className="w-5 h-5 ml-0.5" />
+              <ArrowBigUp className="w-5 h-5" />
             )}
           </button>
         </div>
