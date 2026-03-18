@@ -8,7 +8,7 @@ import { ChatInput } from '@/components/ChatInput';
 import { ChatMessage, Message } from '@/components/ChatMessage';
 import { ChatSession, Attachment, GenerateOptions, generateSpeech, playAudioBuffer } from '@/lib/gemini';
 import { LiveSession } from '@/lib/live';
-import { Bot, Sparkles, Volume2, BrainCircuit, ArrowRight, Zap, Trash2 } from 'lucide-react';
+import { Bot, Sparkles, Volume2, BrainCircuit, ArrowRight, Zap, Trash2, Mic2, AudioLines, SquareDashedMousePointer, Component, Orbit, Spline, Globe } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion } from 'motion/react';
 
@@ -367,11 +367,35 @@ export default function App() {
             transition={{ duration: 0.5, ease: "easeOut" }}
             className="flex flex-col items-center justify-center min-h-full text-center px-4 py-12"
           >
-            <div className={`w-20 h-20 rounded-3xl flex items-center justify-center mb-8 shadow-sm border ${voiceMode ? 'bg-white border-zinc-200 text-zinc-900' : 'bg-violet-50 border-violet-100 text-violet-600'}`}>
-              {voiceMode ? <Volume2 className="w-10 h-10" /> : <BrainCircuit className="w-10 h-10" />}
+            <div className={`w-22 h-22 rounded-3xl flex items-center justify-center mb-8 transition-all duration-300 shadow-sm ${voiceMode
+                ? 'bg-transparent text-black' // Voice: Black bg, Emerald lines
+                : (Date.now() % 2 === 0)
+                  ? 'bg-black border border-zinc-800 text-white' // Globe: Black bg, White icon
+                  : 'bg-violet-50 border border-violet-100 text-violet-600' // SqDash: Violet combo
+              }`}>
+              {voiceMode ? (
+                <AudioLines className="w-14 h-14 animate-pulse" />
+              ) : (
+                /* This logic runs every render, choosing a random look */
+                (Date.now() % 2 === 0) ? (
+                  <Globe className="w-10 h-10 animate-spin-slow" />
+                ) : (
+                  <SquareDashedMousePointer className="w-10 h-10 animate-spin-slow" />
+                )
+              )}
             </div>
             <h2 className="text-4xl font-bold text-zinc-900 mb-4 font-display tracking-tight">
-              {voiceMode ? "Let's Talk!" : "How can I help today?"}
+              {voiceMode ? (
+                "Let's Talk!"
+              ) : (
+                [
+                  "How can I help today?",
+                  "What's on your mind?",
+                  "Ready to build something?",
+                  "Let's solve a problem.",
+                  "How's your day going?"
+                ][messages.length % 5]
+              )}
             </h2>
             <p className="text-zinc-500 max-w-md mb-12 text-lg">
               {voiceMode
