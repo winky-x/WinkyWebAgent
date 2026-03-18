@@ -14,10 +14,10 @@ const server = new Server(
   { capabilities: { tools: {} } }
 );
 
-// 3. Register Tools (The manual way to avoid TS1109)
+// 3. Register Tools
 // @ts-ignore
 server.setRequestHandler({ method: "tools/list" }, async () => ({
-  tools:
+  tools: [] // FIX: Added empty array instead of leaving it blank
 }));
 
 // 4. Handle Tool Calls
@@ -33,14 +33,17 @@ server.setRequestHandler({ method: "tools/call" }, async (request) => {
       payload: { jobId, ...args }
     });
     return {
-      content:
+      content: [{ type: "text", text: `Job ${jobId} initiated.` }] // FIX: Added content array
     };
   }
-  return { isError: true, content: };
+  return { 
+    isError: true, 
+    content: [{ type: "text", text: "Unknown tool" }] // FIX: Added content array
+  };
 });
 
 // 5. The Vercel Handler
-export default async function handler(req, res) {
+export default async function handler(req: any, res: any) {
   const transport = new SSEServerTransport("/api/mcp", res);
   // @ts-ignore
   await server.connect(transport);
