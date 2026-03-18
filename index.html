@@ -1,13 +1,51 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html lang="en" class="antialiased">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My Google AI Studio App</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    
+    <title>Winky Agent — Autonomous Web Intelligence</title>
+    <meta name="title" content="Winky Agent — Autonomous Web Intelligence" />
+    <meta name="description" content="The next generation of web interaction. Control the internet through a high-performance neural bridge and autonomous web agents." />
+
+    <link rel="icon" type="image/svg+xml" href="/logo.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#09090b" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://https://winky-web-agent.vercel.app//" />
+    <meta property="og:title" content="Winky Agent — Autonomous Web Intelligence" />
+    <meta property="og:description" content="Control the web with an AI agent that thinks, acts, listens and browses for you." />
+    <meta property="og:image" content="/og-preview.png" />
+
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:title" content="Winky Agent" />
+    <meta property="twitter:description" content="Autonomous web agents powered by Gemini 1.5." />
+    <meta property="twitter:image" content="/og-preview.png" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+    <style>
+      /* Agency Secret: Prevent 'Flash of Unstyled Content' (FOUC) */
+      body {
+        background-color: #fafafa; /* Matches your zinc-50 bg */
+        margin: 0;
+        padding: 0;
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      }
+      
+      /* Smooth scroll behavior for the whole app */
+      html {
+        scroll-behavior: smooth;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-
