@@ -2,53 +2,67 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { createClient } from "@supabase/supabase-js";
 
-// 1. Initialize Supabase
+// Initialize Supabase (Global scope to reuse connection)
 const supabase = createClient(
   process.env.SUPABASE_URL || '',
   process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 );
 
-// 2. Create the Server
 const server = new Server(
   { name: "winky-web-agent", version: "1.0.0" },
   { capabilities: { tools: {} } }
 );
 
-// 3. Register Tools
-// @ts-ignore
+// Define Tools
 server.setRequestHandler({ method: "tools/list" }, async () => ({
-  tools: [] // FIX: Added empty array instead of leaving it blank
+  tools: [
+    {
+      name: "web_agent",
+      description: "Triggers a browser action",
+      inputSchema: {
+        type: "object",
+        properties: {
+          action: { type: "string" },
+          url: { type: "string" }
+        }
+      }
+    }
+  ]
 }));
 
-// 4. Handle Tool Calls
-// @ts-ignore
-server.setRequestHandler({ method: "tools/call" }, async (request) => {
-  const { name, arguments: args } = request.params;
-  
-  if (name === "web_agent") {
-    const jobId = Math.random().toString(36).substring(7);
-    await supabase.channel('browser-actions').send({
-      type: 'broadcast',
-      event: 'action',
-      payload: { jobId, ...args }
-    });
-    return {
-      content: [{ type: "text", text: `Job ${jobId} initiated.` }] // FIX: Added content array
-    };
-  }
-  return { 
-    isError: true, 
-    content: [{ type: "text", text: "Unknown tool" }] // FIX: Added content array
-  };
-});
+// Global transport reference for POST messages
+let transport: SSEServerTransport | null = null;
 
-// 5. The Vercel Handler
 export default async function handler(req: any, res: any) {
-  const transport = new SSEServerTransport("/api/mcp", res);
-  // @ts-ignore
-  await server.connect(transport);
-  if (req.method === 'POST') {
-    // @ts-ignore
-    await transport.handlePostMessage(req, res);
+  // Set headers for SSE streaming
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Content-Encoding', 'none'); // Prevents Vercel from compressing/buffering
+
+  if (req.method === "GET") {
+    transport = new SSEServerTransport("/api/mcp", res);
+    
+    try {
+      await server.connect(transport);
+      
+      // Keep the serverless function alive
+      // The 300s limit starts now
+      console.log("MCP SSE Connection Established");
+    } catch (err) {
+      console.error("Connection Error:", err);
+      if (!res.writableEnded) res.status(500).end();
+    }
+  } 
+  else if (req.method === "POST") {
+    if (!transport) {
+      return res.status(400).json({ error: "No active SSE session" });
+    }
+    try {
+      await transport.handlePostMessage(req, res);
+    } catch (err) {
+      console.error("POST Error:", err);
+      res.status(500).end();
+    }
   }
 }
