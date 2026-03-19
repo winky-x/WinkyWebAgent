@@ -15,7 +15,7 @@ import { motion } from 'motion/react';
 export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [voiceMode, setVoiceMode] = useState(true); // Default to Talk Mode
+  const [voiceMode, setVoiceMode] = useState(true);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [hoveredCard, setHoveredCard] = useState<number | null>(null);
   const [inputText, setInputText] = useState('');
@@ -36,6 +36,7 @@ export default function App() {
   }, [messages]);
 
   useEffect(() => {
+    chatSessionRef.current = new ChatSession();
     if (voiceMode) {
       if (!liveSessionRef.current) {
         liveSessionRef.current = new LiveSession();
@@ -49,9 +50,8 @@ export default function App() {
           if (msg.role === 'assistant') {
             if (!currentAssistantMessageId) {
               currentAssistantMessageId = crypto.randomUUID();
-              currentAssistantText = msg.text;
+              currentAssistantText = msg.text || '';
 
-              // If the assistant starts speaking, the user's turn is definitely over.
               if (currentUserMessageId) {
                 const idToRemove = currentUserMessageId;
                 if (!currentUserText.trim()) {
@@ -61,12 +61,14 @@ export default function App() {
                 currentUserText = '';
               }
 
+              const uiText = currentAssistantText.replace(/\*Using tool:.*?\*\n?/g, '');
+
               setMessages(prev => {
                 const updatedPrev = prev.map(m => m.role === 'user' ? { ...m, status: 'read' as const } : m);
                 return [...updatedPrev, {
                   id: currentAssistantMessageId,
                   role: 'assistant',
-                  text: currentAssistantText,
+                  text: uiText,
                   isStreaming: !msg.isFinal,
                   timestamp: new Date()
                 }];
@@ -74,21 +76,16 @@ export default function App() {
               setIsSpeaking(true);
             } else {
               const idToUpdate = currentAssistantMessageId;
-              const textToUpdate = currentAssistantText;
 
-              if (msg.isTranscription) {
-                if (msg.text) {
-                  currentAssistantText = msg.text;
-                }
-              } else {
-                currentAssistantText += msg.text;
-              }
-
-              const newText = currentAssistantText;
+              // Always append new tokens for the AI
+              currentAssistantText += (msg.text || '');
+              
+              // Clean out internal tool thoughts before showing to user
+              const uiText = currentAssistantText.replace(/\*Using tool:.*?\*\n?/g, '');
 
               setMessages(prev => prev.map(m =>
                 m.id === idToUpdate
-                  ? { ...m, text: newText, isStreaming: !msg.isFinal }
+                  ? { ...m, text: uiText, isStreaming: !msg.isFinal }
                   : m
               ));
             }
@@ -105,9 +102,8 @@ export default function App() {
           } else if (msg.role === 'user') {
             if (!currentUserMessageId) {
               currentUserMessageId = crypto.randomUUID();
-              currentUserText = msg.text;
+              currentUserText = msg.text || '';
 
-              // If the user starts speaking, the assistant's turn is definitely over.
               if (currentAssistantMessageId) {
                 const idToRemove = currentAssistantMessageId;
                 if (!currentAssistantText.trim()) {
@@ -130,18 +126,17 @@ export default function App() {
               const idToUpdate = currentUserMessageId;
 
               if (msg.isTranscription) {
+                // Speech-to-text usually sends the full phrase as it updates
                 if (msg.text) {
                   currentUserText = msg.text;
                 }
               } else {
-                currentUserText += msg.text;
+                currentUserText += (msg.text || '');
               }
-
-              const newText = currentUserText;
 
               setMessages(prev => prev.map(m =>
                 m.id === idToUpdate
-                  ? { ...m, text: newText, isStreaming: !msg.isFinal }
+                  ? { ...m, text: currentUserText, isStreaming: !msg.isFinal }
                   : m
               ));
             }
@@ -171,7 +166,7 @@ export default function App() {
           console.error("Live API Error:", error);
           toast.error(error.message || "Voice connection error. Please try again.");
           setIsSpeaking(false);
-          setVoiceMode(false); // Fallback to text mode if voice fails
+          setVoiceMode(false);
         };
 
         liveSessionRef.current.setMuted(isMuted);
@@ -244,24 +239,33 @@ export default function App() {
       ];
     });
 
-    // Capture the selected tool for this request, then clear it for the next one
     const currentSelectedTool = selectedTool;
     setSelectedTool('');
-
-    try {
+try {
       const stream = chatSessionRef.current.sendMessageStream(text, attachments, {
         voiceMode,
         selectedTool: currentSelectedTool || undefined
       });
+
       let finalText = "";
+      let finalThought = ""; // New: Track the monologue separately
+
       for await (const chunk of stream) {
-        finalText = chunk.text;
+        // 1. Capture the two different types of data from the stream
+        if (chunk.text) finalText += chunk.text;
+        if (chunk.thought) finalThought += chunk.thought;
+
+        // 2. Clean the UI text of any tool usage markers
+        const uiText = finalText.replace(/\*Using tool:.*?\*\n?/g, '');
+
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === assistantMessageId
               ? {
                 ...msg,
-                text: chunk.text,
+                text: uiText, 
+                thought: finalThought, // THIS sends it to the hidden box!
+                isThinking: chunk.isThinking, 
                 isStreaming: !chunk.isDone,
                 groundingChunks: chunk.groundingChunks || msg.groundingChunks,
               }
@@ -273,7 +277,7 @@ export default function App() {
       if (voiceMode && finalText) {
         setIsSpeaking(true);
         try {
-          const cleanText = finalText.replace(/\*Using tool:.*?\*\n/g, '').replace(/[*_#`]/g, '');
+          const cleanText = finalText.replace(/\*Using tool:.*?\*\n?/g, '').replace(/[*_#`]/g, '');
           const audioBuffer = await generateSpeech(cleanText);
           const source = playAudioBuffer(audioBuffer, () => setIsSpeaking(false));
           currentAudioSourceRef.current = source;
@@ -316,7 +320,7 @@ export default function App() {
         <div className="flex items-center gap-3">
           <div className={`w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden shadow-sm transition-all duration-500 ${isSpeaking ? 'bg-emerald-500 ring-4 ring-emerald-50' : 'bg-none'}`}>
             <img
-              src="public/logo.png"
+              src="/logo.png"
               alt="Winky Logo"
               className={`w-6 h-6 object-contain transition-transform duration-500 ${isSpeaking ? 'scale-110' : 'group-hover:scale-110'}`}
             />
@@ -368,15 +372,14 @@ export default function App() {
             className="flex flex-col items-center justify-center min-h-full text-center px-4 py-12"
           >
             <div className={`w-22 h-22 rounded-3xl flex items-center justify-center mb-8 transition-all duration-300 shadow-sm ${voiceMode
-                ? 'bg-transparent text-black' // Voice: Black bg, Emerald lines
+                ? 'bg-transparent text-black' 
                 : (Date.now() % 2 === 0)
-                  ? 'bg-black border border-zinc-800 text-white' // Globe: Black bg, White icon
-                  : 'bg-violet-50 border border-violet-100 text-violet-600' // SqDash: Violet combo
+                  ? 'bg-black border border-zinc-800 text-white' 
+                  : 'bg-violet-50 border border-violet-100 text-violet-600' 
               }`}>
               {voiceMode ? (
                 <AudioLines className="w-14 h-14 animate-pulse" />
               ) : (
-                /* This logic runs every render, choosing a random look */
                 (Date.now() % 2 === 0) ? (
                   <Globe className="w-10 h-10 animate-spin-slow" />
                 ) : (
