@@ -67,13 +67,11 @@ export class LiveSession {
       this.micContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
       const source = this.micContext.createMediaStreamSource(this.mediaStream);
       this.scriptProcessor = this.micContext.createScriptProcessor(4096, 1, 1);
-      
       source.connect(this.scriptProcessor);
       this.scriptProcessor.connect(this.micContext.destination);
 
       this.scriptProcessor.onaudioprocess = (e) => {
         if (!this.isConnected || !this.sessionPromise || this.isMuted) return;
-
         const inputData = e.inputBuffer.getChannelData(0);
         const pcmData = new Int16Array(inputData.length);
         for (let i = 0; i < inputData.length; i++) {
@@ -87,7 +85,6 @@ export class LiveSession {
           binary += String.fromCharCode(buffer[i]);
         }
         const base64Data = btoa(binary);
-
         this.sessionPromise.then((session) => {
           session.sendRealtimeInput({
             media: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
@@ -117,7 +114,16 @@ export class LiveSession {
           this.playAudioChunk(part.inlineData.data);
         }
         if (part.text) {
-          this.onMessage({ role: 'assistant', text: part.text, isFinal: false });
+          // FIX: Filter out internal monologue and default greeting headers
+          const isInternalThought = 
+            part.text.includes("Addressing the") || 
+            part.text.includes("Initiating a Dialogue") ||
+            part.text.includes("Okay, so the user") ||
+            part.text.includes("I'll correct them with Hinglish");
+
+          if (!isInternalThought) {
+            this.onMessage({ role: 'assistant', text: part.text, isFinal: false });
+          }
         }
       }
     }
@@ -168,7 +174,6 @@ export class LiveSession {
 
   private playAudioChunk(base64Data: string) {
     if (!this.audioContext) return;
-
     const binary = atob(base64Data);
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) {
@@ -185,7 +190,6 @@ export class LiveSession {
     const source = this.audioContext.createBufferSource();
     source.buffer = buffer;
     source.connect(this.audioContext.destination);
-    
     const startTime = Math.max(this.nextStartTime, this.audioContext.currentTime);
     source.start(startTime);
     this.nextStartTime = startTime + buffer.duration;
