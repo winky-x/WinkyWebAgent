@@ -2,12 +2,12 @@ import { GoogleGenAI, ThinkingLevel, Content } from "@google/genai";
 import { toolDeclarations, executeTool } from "./tools";
 import { SYSTEM_INSTRUCTION } from "./prompt";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const ai = new GoogleGenAI({ apiKey: (import.meta as any).env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY });
 
 export interface Attachment {
   mimeType: string;
-  data: string; // base64 encoded string
-  url: string; // object URL for preview
+  data: string;
+  url: string;
 }
 
 export interface GenerateOptions {
@@ -19,35 +19,40 @@ export class ChatSession {
   history: Content[] = [];
 
   async *sendMessageStream(text: string, attachments: Attachment[], options: GenerateOptions) {
+    if (!text && attachments.length === 0) return;
+
     const parts: any[] = [];
     if (text) parts.push({ text });
     for (const att of attachments) {
       parts.push({
-        inlineData: {
-          mimeType: att.mimeType,
-          data: att.data,
-        }
+        inlineData: { mimeType: att.mimeType, data: att.data }
       });
     }
 
     this.history.push({ role: "user", parts });
 
     let isDone = false;
-    let finalFullText = "";
+    let accumulatedText = "";
+    let accumulatedThought = ""; // Track the AI's internal monologue
 
     while (!isDone) {
       const model = options.voiceMode ? "gemini-3-flash-preview" : "gemini-3.1-pro-preview";
+      
+      // INITIALIZE groundingChunks here so it's always available to yield
+  let groundingChunks: any[] | null = null;
+
       const config: any = {
         systemInstruction: SYSTEM_INSTRUCTION,
-        tools: [{ functionDeclarations: toolDeclarations }]
+        tools: [{ functionDeclarations: toolDeclarations }],
+        safetySettings: [
+          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" }
+        ]
       };
 
       if (options.selectedTool) {
         config.toolConfig = {
-          functionCallingConfig: {
-            mode: "ANY",
-            allowedFunctionNames: [options.selectedTool]
-          }
+          functionCallingConfig: { mode: "ANY", allowedFunctionNames: [options.selectedTool] }
         };
       }
 
@@ -61,30 +66,53 @@ export class ChatSession {
         config,
       });
 
-      let fullText = "";
+      let currentLoopText = "";
+      let currentLoopThought = "";
       let functionCalls: any[] = [];
-      let groundingChunks = null;
 
       for await (const chunk of stream) {
         const c = chunk as any;
+      
+        // Update the local groundingChunks if the API returns them
+    if (c.candidates?.[0]?.groundingMetadata?.groundingChunks) {
+      groundingChunks = c.candidates[0].groundingMetadata.groundingChunks;
+    }
+
+        // Capture the thinking/thought process
+        if (c.thought) {
+          currentLoopThought += c.thought;
+          yield {
+            text: accumulatedText + currentLoopText,
+            thought: accumulatedThought + currentLoopThought,
+            groundingChunks,
+            isDone: false,
+            isThinking: true
+          };
+        }
+
         if (c.text) {
-          fullText += c.text;
-          yield { text: finalFullText + fullText, isDone: false, isThinking: !options.voiceMode };
+          currentLoopText += c.text;
+          yield {
+            text: accumulatedText + currentLoopText,
+            thought: accumulatedThought + currentLoopThought,
+            groundingChunks,
+            isDone: false,
+            isThinking: false
+          };
         }
-        if (c.functionCalls && c.functionCalls.length > 0) {
+
+        if (c.functionCalls?.length > 0) {
           functionCalls = c.functionCalls;
-        }
-        if (c.candidates?.[0]?.groundingMetadata?.groundingChunks) {
-          groundingChunks = c.candidates[0].groundingMetadata.groundingChunks;
         }
       }
 
       const modelParts: any[] = [];
-      if (fullText) modelParts.push({ text: fullText });
+      if (currentLoopText) modelParts.push({ text: currentLoopText });
+      if (currentLoopThought) modelParts.push({ thought: currentLoopThought } as any);
       if (functionCalls.length > 0) {
         modelParts.push(...functionCalls.map(fc => ({ functionCall: fc })));
       }
-      
+
       if (modelParts.length > 0) {
         this.history.push({ role: "model", parts: modelParts });
       }
@@ -92,28 +120,37 @@ export class ChatSession {
       if (functionCalls.length > 0) {
         const functionResponses = [];
         for (const fc of functionCalls) {
-          yield { text: finalFullText + fullText + `\n\n*Using tool: ${fc.name}...*\n`, isDone: false, isThinking: true };
+          yield {
+            text: accumulatedText + currentLoopText + `\n\n*Using tool: ${fc.name}...*\n`,
+            isDone: false,
+            isThinking: true
+          };
+
           const result = await executeTool(fc.name, fc.args);
           functionResponses.push({
-            functionResponse: {
-              name: fc.name,
-              id: fc.id,
-              response: result
-            }
+            functionResponse: { name: fc.name, response: { content: result } }
           });
         }
+
         this.history.push({ role: "user", parts: functionResponses });
-        finalFullText += fullText + "\n\n";
-        // Loop continues to send the function responses back to the model
+        accumulatedText += currentLoopText + "\n\n";
+        accumulatedThought += currentLoopThought;
       } else {
         isDone = true;
-        finalFullText += fullText;
-        yield { text: finalFullText, isDone: true, groundingChunks, isThinking: false };
+        // Inside gemini.ts -> sendMessageStream
+        yield {
+          text: accumulatedText + currentLoopText,
+          thought: accumulatedThought + currentLoopThought,
+          groundingChunks, // Add this line to every yield if you want to use it
+          isDone: false,
+          isThinking: false
+        };
       }
     }
   }
 }
 
+// ... (Keep generateSpeech and playAudioBuffer as they were)
 export async function generateSpeech(text: string): Promise<AudioBuffer> {
   const response = await ai.models.generateContent({
     model: "gemini-2.5-flash-preview-tts",
