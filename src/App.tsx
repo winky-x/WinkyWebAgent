@@ -320,7 +320,7 @@ try {
         <div className="flex items-center gap-3">
           <div className={`w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden shadow-sm transition-all duration-500 ${isSpeaking ? 'bg-emerald-500 ring-4 ring-emerald-50' : 'bg-none'}`}>
             <img
-              src="/logo.png"
+              src="public/logo.png"
               alt="Winky Logo"
               className={`w-6 h-6 object-contain transition-transform duration-500 ${isSpeaking ? 'scale-110' : 'group-hover:scale-110'}`}
             />
