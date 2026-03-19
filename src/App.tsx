@@ -61,7 +61,7 @@ export default function App() {
                 currentUserText = '';
               }
 
-              const uiText = currentAssistantText.replace(/\*Using tool:.*?\*\n?/g, '');
+              const uiText = currentAssistantText.split(/\*Using tool:[^*]*\*/g).join('');
 
               setMessages(prev => {
                 const updatedPrev = prev.map(m => m.role === 'user' ? { ...m, status: 'read' as const } : m);
@@ -79,9 +79,8 @@ export default function App() {
 
               // Always append new tokens for the AI
               currentAssistantText += (msg.text || '');
-              
-              // Clean out internal tool thoughts before showing to user
-              const uiText = currentAssistantText.replace(/\*Using tool:.*?\*\n?/g, '');
+
+              const uiText = currentAssistantText.split(/\*Using tool:[^*]*\*/g).join('');
 
               setMessages(prev => prev.map(m =>
                 m.id === idToUpdate
@@ -241,7 +240,7 @@ export default function App() {
 
     const currentSelectedTool = selectedTool;
     setSelectedTool('');
-try {
+    try {
       const stream = chatSessionRef.current.sendMessageStream(text, attachments, {
         voiceMode,
         selectedTool: currentSelectedTool || undefined
@@ -255,17 +254,17 @@ try {
         if (chunk.text) finalText += chunk.text;
         if (chunk.thought) finalThought += chunk.thought;
 
-        // 2. Clean the UI text of any tool usage markers
-        const uiText = finalText.replace(/\*Using tool:.*?\*\n?/g, '');
+
+        const uiText = finalText.split(/\*Using tool:[^*]*\*/g).join('');
 
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === assistantMessageId
               ? {
                 ...msg,
-                text: uiText, 
+                text: uiText,
                 thought: finalThought, // THIS sends it to the hidden box!
-                isThinking: chunk.isThinking, 
+                isThinking: chunk.isThinking,
                 isStreaming: !chunk.isDone,
                 groundingChunks: chunk.groundingChunks || msg.groundingChunks,
               }
@@ -372,10 +371,10 @@ try {
             className="flex flex-col items-center justify-center min-h-full text-center px-4 py-12"
           >
             <div className={`w-22 h-22 rounded-3xl flex items-center justify-center mb-8 transition-all duration-300 shadow-sm ${voiceMode
-                ? 'bg-transparent text-black' 
-                : (Date.now() % 2 === 0)
-                  ? 'bg-black border border-zinc-800 text-white' 
-                  : 'bg-violet-50 border border-violet-100 text-violet-600' 
+              ? 'bg-transparent text-black'
+              : (Date.now() % 2 === 0)
+                ? 'bg-black border border-zinc-800 text-white'
+                : 'bg-violet-50 border border-violet-100 text-violet-600'
               }`}>
               {voiceMode ? (
                 <AudioLines className="w-14 h-14 animate-pulse" />
