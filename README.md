@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="public/logo.png" alt="Winky AI Logo" width="250" height="250" style="border-radius: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.1);">
+  <img src="public/logo-white.png" alt="Winky AI Logo" width="250" height="250" style="border-radius: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.1);">
   
   # 🎙️ Winky AI
   ### Your Sassy AI Companion
