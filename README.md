@@ -19,7 +19,7 @@ Winky is a cutting-edge AI assistant made by Yuvraj Chandra. She combines natura
 
 ## ✨ Key Features
 
--  ** Voice Mode**: Real-time voice interaction with natural speech synthesis
+-  **Voice Mode**: Real-time voice interaction with natural speech synthesis
 -  **Thinking Mode**: Deep reasoning with extended thought processes for complex problems
 -  **Smart Tool Integration**: 
   - Web search (fast & detailed)
