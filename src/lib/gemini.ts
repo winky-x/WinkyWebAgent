@@ -36,7 +36,7 @@ export class ChatSession {
     let accumulatedThought = ""; // Track the AI's internal monologue
 
     while (!isDone) {
-      const model = options.voiceMode ? "gemini-3-flash-preview" : "gemini-3-pro-preview" ;
+      const model = options.voiceMode ? "gemini-3-flash-preview" : "gemini-2.5-pro" ;
       
       // INITIALIZE groundingChunks here so it's always available to yield
   let groundingChunks: any[] | null = null;
