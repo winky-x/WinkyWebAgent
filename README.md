@@ -1,5 +1,16 @@
 <div align="center">
-<img width="1200" height="475" alt="Winky AI Banner" src="https://github.com/winky-x/WinkyWebAgent/public/logo.png" />
+  <img src="public/logo.png" alt="Winky AI Logo" width="250" height="250" style="border-radius: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.1);">
+  
+  # 🎙️ Winky AI
+  ### Your Sassy AI Companion
+  
+  <p>
+    <strong>Advanced conversational AI agent with real-time tool access, voice mode, and deep reasoning capabilities</strong>
+  </p>
+  
+  [![GitHub](https://img.shields.io/badge/GitHub-winky--x-black?style=flat-square&logo=github)](https://github.com/winky-x)
+  [![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
+  
 </div>
 
 # 🎙️ Winky AI - Your Sassy AI Companion
