@@ -141,16 +141,6 @@ src/
 
 ---
 
-## 🔐 Environment Variables
-
-```env
-VITE_GEMINI_API_KEY    # Your Gemini API key (required)
-```
-
-Get your API key from [Google AI Studio](https://ai.google.dev/aistudio)
-
----
-
 ## 🎯 Model Configuration
 
 **Current Setup:**
