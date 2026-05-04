@@ -2,6 +2,17 @@ import { Type, FunctionDeclaration } from "@google/genai";
 
 export const toolDeclarations: FunctionDeclaration[] = [
   {
+    name: "control_robot_hardware",
+    description: "Commands the physical robot to move or toggle lights. Use 'F' for forward, 'L' for left, 'S' for stop, and 'H' for headlights.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        command: { type: Type.STRING, description: "Single character command: F, L, S, or H" }
+      },
+      required: ["command"]
+    }
+  },
+  {
     name: "fast_google_search",
     description: "Purpose: Quick fact-checking and immediate answers. Target Mode: Voice Mode. Expected Behavior: Performs a lightweight search and returns only the top snippet or a highly concise summary for quick, spoken replies.",
     parameters: {
@@ -82,6 +93,22 @@ export const toolDeclarations: FunctionDeclaration[] = [
 export const executeTool = async (name: string, args: any): Promise<any> => {
   try {
     switch (name) {
+      case "move_winky_robot": {
+  try {
+    // Request permission to use the USB port
+    const port = await navigator.serial.requestPort();
+    await port.open({ baudRate: 9600 });
+    
+    const writer = port.writable.getWriter();
+    await writer.write(new TextEncoder().encode(args.action));
+    
+    writer.releaseLock();
+    return { status: "Command sent to hardware", command: args.action };
+  } catch (err) {
+    return { error: "Could not connect to Arduino. Is it plugged in?" };
+  }
+}
+
       case "fast_google_search": {
         try {
           // Using DuckDuckGo HTML via AllOrigins proxy for fast search
@@ -90,7 +117,7 @@ export const executeTool = async (name: string, args: any): Promise<any> => {
           if (!res.ok) throw new Error("Network response was not ok");
           const data = await res.json();
           const html = data.contents;
-          
+
           // Extract the first snippet
           const snippetMatch = html.match(/<a class="result__snippet[^>]*>(.*?)<\/a>/i);
           if (snippetMatch) {
@@ -102,7 +129,7 @@ export const executeTool = async (name: string, args: any): Promise<any> => {
           return { error: "Error: Could not fetch search results. Please inform the user." };
         }
       }
-      
+
       case "detailed_google_search": {
         try {
           const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(`https://html.duckduckgo.com/html/?q=${args.query}`)}`;
@@ -110,12 +137,12 @@ export const executeTool = async (name: string, args: any): Promise<any> => {
           if (!res.ok) throw new Error("Network response was not ok");
           const data = await res.json();
           const html = data.contents;
-          
+
           const results = [];
           const regex = /<h2 class="result__title">.*?<a[^>]+href="([^"]+)"[^>]*>(.*?)<\/a>.*?<a class="result__snippet[^>]*>(.*?)<\/a>/gs;
           let match;
           let count = 0;
-          
+
           while ((match = regex.exec(html)) !== null && count < 5) {
             results.push({
               url: match[1],
@@ -124,7 +151,7 @@ export const executeTool = async (name: string, args: any): Promise<any> => {
             });
             count++;
           }
-          
+
           if (results.length > 0) {
             return { results };
           }
@@ -140,11 +167,11 @@ export const executeTool = async (name: string, args: any): Promise<any> => {
           const geoData = await geoRes.json();
           if (!geoData.results || geoData.results.length === 0) return { error: "Location not found" };
           const { latitude, longitude, name, country, timezone } = geoData.results[0];
-          
+
           const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,showers,snowfall,weather_code,cloud_cover,pressure_msl,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_sum&timezone=${encodeURIComponent(timezone || 'auto')}`);
           if (!weatherRes.ok) throw new Error("Weather API error");
           const weatherData = await weatherRes.json();
-          
+
           return {
             location: `${name}, ${country}`,
             current: weatherData.current,
@@ -163,19 +190,19 @@ export const executeTool = async (name: string, args: any): Promise<any> => {
           if (!res.ok) throw new Error("Network response was not ok");
           const data = await res.json();
           const html = data.contents;
-          
+
           // Very basic HTML to text extraction
           let text = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, ' ')
-                         .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, ' ')
-                         .replace(/<[^>]+>/g, ' ')
-                         .replace(/\s+/g, ' ')
-                         .trim();
-                         
+            .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, ' ')
+            .replace(/<[^>]+>/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+
           // Truncate to avoid massive payloads
           if (text.length > 15000) {
             text = text.substring(0, 15000) + "... [Content truncated]";
           }
-          
+
           return { content: text };
         } catch (e: any) {
           return { error: `Error: Could not read webpage content from ${args.url}. Please inform the user.` };
@@ -197,23 +224,23 @@ export const executeTool = async (name: string, args: any): Promise<any> => {
       case "get_current_time_and_date": {
         try {
           const now = new Date();
-          const options: Intl.DateTimeFormatOptions = { 
-            weekday: 'long', 
-            year: 'numeric', 
-            month: 'long', 
+          const options: Intl.DateTimeFormatOptions = {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
             day: 'numeric',
             hour: '2-digit',
             minute: '2-digit',
             second: '2-digit',
             timeZoneName: 'long'
           };
-          
+
           if (args.timeZone) {
             options.timeZone = args.timeZone;
           }
-          
+
           const formatted = now.toLocaleString('en-US', options);
-          return { 
+          return {
             current_date_and_time: formatted,
             iso_string: now.toISOString(),
             timeZone_used: args.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone
