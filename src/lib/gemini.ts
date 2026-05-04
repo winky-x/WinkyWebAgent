@@ -5,7 +5,6 @@
  */
 
 import { GoogleGenAI, ThinkingLevel, Content } from "@google/genai";
-import OpenAI from "openai";
 import { toolDeclarations, executeTool } from "./tools";
 import { SYSTEM_INSTRUCTION } from "./prompt";
 
