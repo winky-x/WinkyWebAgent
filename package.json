@@ -12,7 +12,6 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "openai": "^4.0.0",
     "@google/genai": "^1.29.0",
     "@modelcontextprotocol/sdk": "1.26.0",
     "mcp-handler": "latest",
