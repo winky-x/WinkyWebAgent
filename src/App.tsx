@@ -5,50 +5,12 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { ChatInput } from '@/components/ChatInput';
-import { ChatMessage } from '@/components/ChatMessage';
-import { Message, ChatSession, Attachment, generateSpeech, playAudioBuffer } from '@/lib/gemini';
+import { ChatMessage, Message } from '@/components/ChatMessage';
+import { ChatSession, Attachment, GenerateOptions, generateSpeech, playAudioBuffer } from '@/lib/gemini';
 import { LiveSession } from '@/lib/live';
-import {
-  Bot, Sparkles, Volume2, BrainCircuit, ArrowRight, Zap, Trash2, 
-  AudioLines, SquareDashedMousePointer, Globe, ChevronDown, Database
-} from 'lucide-react';
+import { Bot, Sparkles, Volume2, BrainCircuit, ArrowRight, Zap, Trash2, Mic2, AudioLines, SquareDashedMousePointer, Component, Orbit, Spline, Globe } from 'lucide-react';
 import { toast } from 'sonner';
-import { motion, AnimatePresence } from 'motion/react';
-
-// Agency-Level Model Configuration
-const AVAILABLE_MODELS = [
-  {
-    id: 'gemini-3-flash',
-    name: 'Winky Pro 3',
-    provider: 'google' as const,
-    canThink: false,
-    badge: 'Fastest'
-  },
-  {
-    id: 'gemini-3-flash',
-    name: 'Winky Thinking 3',
-    provider: 'google' as const,
-    canThink: true,
-    badge: 'Reasoning'
-  },
-  {
-    id: 'stepfun/step-3.5-flash:free',
-    name: 'Step-3.5 Flash',
-    provider: 'openrouter' as const,
-    canThink: false,
-    badge: 'Free'
-  },
-  {
-    id: 'nvidia/nemotron-3-super-120b-a12b:free',
-    name: 'Nemotron Super',
-    provider: 'openrouter' as const,
-    canThink: false,
-    badge: 'High-Mem'
-  }
-];
-
-// Helper for conditional classes without needing extra libs
-const cn = (...classes: (string | boolean | undefined)[]) => classes.filter(Boolean).join(' ');
+import { motion } from 'motion/react';
 
 export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -59,10 +21,6 @@ export default function App() {
   const [inputText, setInputText] = useState('');
   const [isMuted, setIsMuted] = useState(false);
   const [selectedTool, setSelectedTool] = useState<string>('');
-
-  // Unified Model State
-  const [currentModel, setCurrentModel] = useState(AVAILABLE_MODELS[0]);
-  const [showModelMenu, setShowModelMenu] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatSessionRef = useRef(new ChatSession());
@@ -77,7 +35,6 @@ export default function App() {
     scrollToBottom();
   }, [messages]);
 
-  // Voice & Live Session Logic
   useEffect(() => {
     chatSessionRef.current = new ChatSession();
     if (voiceMode) {
@@ -94,6 +51,7 @@ export default function App() {
             if (!currentAssistantMessageId) {
               currentAssistantMessageId = crypto.randomUUID();
               currentAssistantText = msg.text || '';
+
               if (currentUserMessageId) {
                 const idToRemove = currentUserMessageId;
                 if (!currentUserText.trim()) {
@@ -102,7 +60,9 @@ export default function App() {
                 currentUserMessageId = '';
                 currentUserText = '';
               }
+
               const uiText = currentAssistantText.split(/\*Using tool:[^*]*\*/g).join('');
+
               setMessages(prev => {
                 const updatedPrev = prev.map(m => m.role === 'user' ? { ...m, status: 'read' as const } : m);
                 return [...updatedPrev, {
@@ -116,16 +76,23 @@ export default function App() {
               setIsSpeaking(true);
             } else {
               const idToUpdate = currentAssistantMessageId;
+
+              // Always append new tokens for the AI
               currentAssistantText += (msg.text || '');
+
               const uiText = currentAssistantText.split(/\*Using tool:[^*]*\*/g).join('');
+
               setMessages(prev => prev.map(m =>
-                m.id === idToUpdate ? { ...m, text: uiText, isStreaming: !msg.isFinal } : m
+                m.id === idToUpdate
+                  ? { ...m, text: uiText, isStreaming: !msg.isFinal }
+                  : m
               ));
             }
 
             if (msg.isFinal) {
+              const idToRemove = currentAssistantMessageId;
               if (!currentAssistantText.trim()) {
-                setMessages(prev => prev.filter(m => m.id !== currentAssistantMessageId));
+                setMessages(prev => prev.filter(m => m.id !== idToRemove));
               }
               currentAssistantMessageId = '';
               currentAssistantText = '';
@@ -135,14 +102,17 @@ export default function App() {
             if (!currentUserMessageId) {
               currentUserMessageId = crypto.randomUUID();
               currentUserText = msg.text || '';
+
               if (currentAssistantMessageId) {
+                const idToRemove = currentAssistantMessageId;
                 if (!currentAssistantText.trim()) {
-                  setMessages(prev => prev.filter(m => m.id !== currentAssistantMessageId));
+                  setMessages(prev => prev.filter(m => m.id !== idToRemove));
                 }
                 currentAssistantMessageId = '';
                 currentAssistantText = '';
                 setIsSpeaking(false);
               }
+
               setMessages(prev => [...prev, {
                 id: currentUserMessageId,
                 role: 'user',
@@ -152,20 +122,37 @@ export default function App() {
                 status: 'sent'
               }]);
             } else {
+              const idToUpdate = currentUserMessageId;
+
               if (msg.isTranscription) {
-                if (msg.text) currentUserText = msg.text;
+                // Speech-to-text usually sends the full phrase as it updates
+                if (msg.text) {
+                  currentUserText = msg.text;
+                }
               } else {
                 currentUserText += (msg.text || '');
               }
+
               setMessages(prev => prev.map(m =>
-                m.id === currentUserMessageId ? { ...m, text: currentUserText, isStreaming: !msg.isFinal } : m
+                m.id === idToUpdate
+                  ? { ...m, text: currentUserText, isStreaming: !msg.isFinal }
+                  : m
               ));
             }
+
             if (msg.isFinal) {
+              const idToRemove = currentUserMessageId;
+              if (!currentUserText.trim()) {
+                setMessages(prev => prev.filter(m => m.id !== idToRemove));
+              }
               currentUserMessageId = '';
               currentUserText = '';
             }
           }
+        };
+
+        liveSessionRef.current.onRawMessage = (msg: any) => {
+          console.log("Live API Message:", msg);
         };
 
         liveSessionRef.current.onInterrupted = () => {
@@ -175,7 +162,8 @@ export default function App() {
         };
 
         liveSessionRef.current.onError = (error) => {
-          toast.error(error.message || "Voice connection error.");
+          console.error("Live API Error:", error);
+          toast.error(error.message || "Voice connection error. Please try again.");
           setIsSpeaking(false);
           setVoiceMode(false);
         };
@@ -191,6 +179,7 @@ export default function App() {
         liveSessionRef.current = null;
       }
     }
+
     return () => {
       if (liveSessionRef.current) {
         liveSessionRef.current.disconnect();
@@ -207,8 +196,13 @@ export default function App() {
     setIsSpeaking(false);
   };
 
+  const typeTextToInput = (text: string) => {
+    setInputText(text);
+  };
+
   const handleSend = async (text: string, attachments: Attachment[]) => {
     stopSpeaking();
+
     const userMessage: Message = {
       id: crypto.randomUUID(),
       role: 'user',
@@ -221,35 +215,46 @@ export default function App() {
     setMessages((prev) => [...prev, userMessage]);
 
     if (voiceMode && liveSessionRef.current) {
-      if (text.trim()) liveSessionRef.current.sendText(text);
+      if (text.trim()) {
+        liveSessionRef.current.sendText(text);
+      }
       return;
     }
 
     setIsGenerating(true);
+
     const assistantMessageId = crypto.randomUUID();
-    
     setMessages((prev) => {
       const updatedPrev = prev.map(m => m.role === 'user' ? { ...m, status: 'read' as const } : m);
-      return [...updatedPrev, {
-        id: assistantMessageId,
-        role: 'assistant',
-        text: '',
-        isStreaming: true,
-        timestamp: new Date()
-      }];
+      return [
+        ...updatedPrev,
+        {
+          id: assistantMessageId,
+          role: 'assistant',
+          text: '',
+          isStreaming: true,
+          timestamp: new Date()
+        },
+      ];
     });
 
+    const currentSelectedTool = selectedTool;
+    setSelectedTool('');
     try {
       const stream = chatSessionRef.current.sendMessageStream(text, attachments, {
         voiceMode,
-        selectedTool: selectedTool || undefined,
-        provider: currentModel.provider,
-        modelId: currentModel.id
+        selectedTool: currentSelectedTool || undefined
       });
 
       let finalText = "";
+      let finalThought = ""; // New: Track the monologue separately
+
       for await (const chunk of stream) {
+        // 1. Capture the two different types of data from the stream
         if (chunk.text) finalText += chunk.text;
+        if (chunk.thought) finalThought += chunk.thought;
+
+
         const uiText = finalText.split(/\*Using tool:[^*]*\*/g).join('');
 
         setMessages((prev) =>
@@ -258,7 +263,7 @@ export default function App() {
               ? {
                 ...msg,
                 text: uiText,
-                thought: chunk.thought || msg.thought,
+                thought: finalThought, // THIS sends it to the hidden box!
                 isThinking: chunk.isThinking,
                 isStreaming: !chunk.isDone,
                 groundingChunks: chunk.groundingChunks || msg.groundingChunks,
@@ -270,173 +275,201 @@ export default function App() {
 
       if (voiceMode && finalText) {
         setIsSpeaking(true);
-        const cleanText = finalText.split(/\*Using tool:[^*]*\*/g).join('').replace(/[*_#`]/g, '');
-        const audioBuffer = await generateSpeech(cleanText);
-        currentAudioSourceRef.current = playAudioBuffer(audioBuffer, () => setIsSpeaking(false));
+        try {
+          const cleanText = finalText.replace(/\*Using tool:.*?\*\n?/g, '').replace(/[*_#`]/g, '');
+          const audioBuffer = await generateSpeech(cleanText);
+          const source = playAudioBuffer(audioBuffer, () => setIsSpeaking(false));
+          currentAudioSourceRef.current = source;
+        } catch (e) {
+          console.error("TTS Error:", e);
+          toast.error("Failed to generate speech audio.");
+          setIsSpeaking(false);
+        }
       }
+
     } catch (error: any) {
-      toast.error(error.message || "Generation failed");
-      setMessages(prev => prev.map(m => m.id === assistantMessageId ? { ...m, isStreaming: false, isError: true } : m));
+      console.error('Generation error:', error);
+      toast.error(error.message || "Failed to generate response");
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === assistantMessageId
+            ? {
+              ...msg,
+              text: msg.text ? msg.text : error.message || 'Failed to generate response.',
+              isStreaming: false,
+              isError: true,
+            }
+            : msg
+        )
+      );
     } finally {
       setIsGenerating(false);
-      setSelectedTool('');
     }
+  };
+
+  const clearChat = () => {
+    setMessages([]);
+    chatSessionRef.current = new ChatSession();
+    toast.success("Chat cleared");
   };
 
   return (
     <div className="flex flex-col h-screen bg-zinc-50 font-sans">
       <header className="flex items-center justify-between px-6 py-4 bg-white/70 backdrop-blur-xl border-b border-zinc-200/50 sticky top-0 z-50">
         <div className="flex items-center gap-3">
-          <div className={cn(
-            "w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden shadow-sm transition-all duration-500",
-            isSpeaking ? "bg-emerald-500 ring-4 ring-emerald-50" : "bg-white border border-zinc-200"
-          )}>
-            <img src="/logo.png" alt="Logo" style={{ width: '30px', height: '30px' }} />
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden shadow-sm transition-all duration-500 ${isSpeaking ? 'bg-emerald-500 ring-4 ring-emerald-50' : 'bg-none'}`}>
+            <img
+              src="/logo.png"
+              alt="Winky Logo"
+              className={`w-6 h-6 object-contain transition-transform duration-500 ${isSpeaking ? 'scale-110' : 'group-hover:scale-110'}`}
+            />
           </div>
           <div>
             <h1 className="text-xl font-bold text-zinc-900 tracking-tight font-display">Winky AI</h1>
-            <div className="flex items-center gap-2">
-              <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-zinc-400">
-                <Database size={10} /> {currentModel.provider}
-              </span>
-              <span className="w-1 h-1 rounded-full bg-zinc-300" />
-              <span className="text-[10px] font-bold uppercase tracking-widest text-violet-500">
-                {currentModel.badge}
-              </span>
-            </div>
+            <p className="text-xs text-zinc-500 flex items-center gap-1 font-medium">
+              <Sparkles className="w-3 h-3 text-violet-500" />
+              {voiceMode ? 'Voice Mode Active' : 'Thinking Mode Active'}
+            </p>
           </div>
         </div>
 
         <div className="flex items-center gap-4">
-          <div className="relative">
+          {messages.length > 0 && (
             <button
-              onClick={() => setShowModelMenu(!showModelMenu)}
-              className="flex items-center gap-2 px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-xl hover:bg-zinc-800 transition-all text-white shadow-lg"
+              onClick={clearChat}
+              className="p-2 text-zinc-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+              title="Clear Chat"
             >
-              <div className="flex flex-col items-start">
-                <span className="text-[9px] text-zinc-500 uppercase font-bold tracking-widest leading-none mb-1">Engine</span>
-                <span className="text-sm font-medium leading-none">{currentModel.name}</span>
-              </div>
-              <ChevronDown size={14} className={cn("text-zinc-500 transition-transform duration-300", showModelMenu && "rotate-180")} />
+              <Trash2 className="w-4 h-4" />
             </button>
-
-            <AnimatePresence>
-              {showModelMenu && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                  className="absolute right-0 mt-2 w-64 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden z-50"
-                >
-                  <div className="p-2 flex flex-col gap-1">
-                    {AVAILABLE_MODELS.map((model) => (
-                      <button
-                        key={model.id}
-                        onClick={() => {
-                          setCurrentModel(model);
-                          setShowModelMenu(false);
-                          toast.success(`Active: ${model.name}`);
-                        }}
-                        className={cn(
-                          "flex items-center justify-between p-3 rounded-xl transition-all hover:bg-zinc-800 text-left group",
-                          currentModel.id === model.id ? "bg-zinc-800/50 ring-1 ring-zinc-700" : ""
-                        )}
-                      >
-                        <div className="flex flex-col">
-                          <span className="text-sm font-semibold text-zinc-100">{model.name}</span>
-                          <span className="text-[10px] text-zinc-500 uppercase tracking-tight">{model.provider} API</span>
-                        </div>
-                        {model.canThink && (
-                          <div className="px-1.5 py-0.5 rounded bg-violet-500/20 border border-violet-500/30 text-[9px] text-violet-400 font-bold uppercase">
-                            Think
-                          </div>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
-          <div className="flex items-center bg-zinc-100/80 p-1 rounded-xl border border-zinc-200/50 backdrop-blur-sm shadow-inner">
+          )}
+          <div className="flex items-center bg-zinc-100/80 p-1 rounded-xl border border-zinc-200/50 backdrop-blur-sm">
             <button
               onClick={() => { setVoiceMode(true); stopSpeaking(); }}
-              className={cn(
-                "flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold transition-all duration-300",
-                voiceMode ? "bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/50" : "text-zinc-500 hover:text-zinc-700"
-              )}
+              className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold transition-all duration-300 ${voiceMode ? 'bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/50' : 'text-zinc-500 hover:text-zinc-700'}`}
             >
               <Volume2 className="w-4 h-4" />
               Voice
             </button>
             <button
               onClick={() => { setVoiceMode(false); stopSpeaking(); }}
-              className={cn(
-                "flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold transition-all duration-300",
-                !voiceMode ? "bg-white text-violet-600 shadow-sm ring-1 ring-zinc-200/50" : "text-zinc-500 hover:text-zinc-700"
-              )}
+              className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold transition-all duration-300 ${!voiceMode ? 'bg-white text-violet-600 shadow-sm ring-1 ring-zinc-200/50' : 'text-zinc-500 hover:text-zinc-700'}`}
             >
               <BrainCircuit className="w-4 h-4" />
-              Text
+              Think
             </button>
           </div>
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto pb-32 scrollbar-hide">
+      <main className="flex-1 overflow-y-auto pb-32">
         {messages.length === 0 ? (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
             className="flex flex-col items-center justify-center min-h-full text-center px-4 py-12"
           >
-            <div className={cn(
-                "w-20 h-20 rounded-3xl flex items-center justify-center mb-8 transition-all duration-500 shadow-xl border",
-                voiceMode ? "bg-emerald-50 border-emerald-100 text-emerald-600" : "bg-violet-50 border-violet-100 text-violet-600"
-            )}>
-              {voiceMode ? <AudioLines className="w-10 h-10 animate-pulse" /> : <Sparkles className="w-10 h-10 animate-bounce" />}
+            <div className={`w-22 h-22 rounded-3xl flex items-center justify-center mb-8 transition-all duration-300 shadow-sm ${voiceMode
+              ? 'bg-transparent text-black'
+              : (Date.now() % 2 === 0)
+                ? 'bg-black border border-zinc-800 text-white'
+                : 'bg-violet-50 border border-violet-100 text-violet-600'
+              }`}>
+              {voiceMode ? (
+                <AudioLines className="w-14 h-14 animate-pulse" />
+              ) : (
+                (Date.now() % 2 === 0) ? (
+                  <Globe className="w-10 h-10 animate-spin-slow" />
+                ) : (
+                  <SquareDashedMousePointer className="w-10 h-10 animate-spin-slow" />
+                )
+              )}
             </div>
-            <h2 className="text-4xl font-black text-zinc-900 mb-4 tracking-tight">
-              {voiceMode ? "Let's Talk!" : "Winky Thinking Mode"}
+            <h2 className="text-4xl font-bold text-zinc-900 mb-4 font-display tracking-tight">
+              {voiceMode ? (
+                "Let's Talk!"
+              ) : (
+                [
+                  "How can I help today?",
+                  "What's on your mind?",
+                  "Ready to build something?",
+                  "Let's solve a problem.",
+                  "How's your day going?"
+                ][messages.length % 5]
+              )}
             </h2>
-            <p className="text-zinc-500 max-w-sm mb-12 text-lg leading-relaxed">
-              {voiceMode 
-                ? "Conversational AI at 24kHz. Speak naturally, I'm listening." 
-                : `Using ${currentModel.name} for high-level reasoning and complex logic.`}
+            <p className="text-zinc-500 max-w-md mb-12 text-lg">
+              {voiceMode
+                ? "I'll respond quickly and speak my answers out loud. Perfect for conversation!"
+                : "I'll take my time to reason through complex problems using advanced tools."}
             </p>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl w-full">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-4xl w-full" onMouseLeave={() => setHoveredCard(null)}>
               {[
                 {
                   title: 'Smart Tools',
+                  desc: 'Web Search, Weather, Math, Time & more',
                   icon: <Zap className="w-5 h-5 text-amber-500" />,
-                  prompts: ["What's the weather in London?", "Latest AI news summary"]
+                  details: [
+                    { label: 'Fast Web Search', prompt: "What's the latest news on AI?" },
+                    { label: 'Real-time Weather', prompt: "What's the weather in Tokyo right now?" },
+                    { label: 'Complex Math', prompt: "Calculate (452 * 1.08) / 12." },
+                    { label: 'Time & Date', prompt: "What time is it in London?" }
+                  ],
                 },
                 {
-                  title: 'Reasoning',
-                  icon: <BrainCircuit className="w-5 h-5 text-violet-500" />,
-                  prompts: ["Write a React hook for API calls", "Explain quantum decoherence"]
-                }
-              ].map((group, idx) => (
-                <div key={idx} className="p-6 bg-white rounded-3xl border border-zinc-200 shadow-sm text-left">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="p-2 bg-zinc-50 rounded-xl border border-zinc-100">{group.icon}</div>
-                    <h3 className="font-bold text-zinc-900">{group.title}</h3>
+                  title: 'Deep Reasoning',
+                  desc: 'Complex problem solving & logic',
+                  icon: <Sparkles className="w-5 h-5 text-violet-500" />,
+                  details: [
+                    { label: 'Read Webpages', prompt: "Read https://en.wikipedia.org/wiki/Quantum_computing and summarize it." },
+                    { label: 'Code Generation', prompt: "Write a React component for a modern login form." },
+                    { label: 'Data Analysis', prompt: "Compare the economic models of capitalism and socialism." }
+                  ],
+                },
+              ].map((feature, idx) => {
+                const isHovered = hoveredCard === idx;
+                const isOthersHovered = hoveredCard !== null && hoveredCard !== idx;
+
+                return (
+                  <div
+                    key={idx}
+                    onMouseEnter={() => setHoveredCard(idx)}
+                    className={`p-6 bg-white rounded-3xl border border-zinc-200/80 shadow-sm text-left transition-all duration-500 overflow-hidden relative
+                      ${isHovered ? 'shadow-xl scale-[1.02] border-violet-200 ring-4 ring-violet-50 z-10' : ''}
+                      ${isOthersHovered ? 'opacity-50 scale-[0.98]' : ''}
+                    `}
+                  >
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="p-2 bg-zinc-50 rounded-xl border border-zinc-100">
+                        {feature.icon}
+                      </div>
+                      <h3 className="text-lg font-bold text-zinc-900 font-display">{feature.title}</h3>
+                    </div>
+                    <p className={`text-zinc-500 text-sm transition-all duration-300 ${isHovered ? 'opacity-0 h-0' : 'opacity-100 h-auto'}`}>
+                      {feature.desc}
+                    </p>
+
+                    <div className={`transition-all duration-500 flex flex-col gap-2 ${isHovered ? 'opacity-100 max-h-96 mt-2' : 'opacity-0 max-h-0 overflow-hidden'}`}>
+                      <div className="h-px w-full bg-zinc-100 mb-2" />
+                      {feature.details.map((detail, dIdx) => (
+                        <button
+                          key={dIdx}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            typeTextToInput(detail.prompt);
+                          }}
+                          className="flex items-center justify-between text-sm text-zinc-700 font-medium bg-zinc-50 hover:bg-violet-50 hover:text-violet-700 p-3 rounded-xl transition-colors text-left w-full group border border-transparent hover:border-violet-100"
+                        >
+                          <span>{detail.label}</span>
+                          <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    {group.prompts.map((p, pIdx) => (
-                      <button 
-                        key={pIdx}
-                        onClick={() => setInputText(p)}
-                        className="w-full text-left text-sm p-3 rounded-xl bg-zinc-50 hover:bg-zinc-100 transition-colors border border-transparent hover:border-zinc-200"
-                      >
-                        {p}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </motion.div>
         ) : (
