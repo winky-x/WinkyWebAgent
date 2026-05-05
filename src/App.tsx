@@ -81,7 +81,7 @@ export default function App() {
               // Always append new tokens for the AI
               currentAssistantText += (msg.text || '');
 
-              const uiText = currentAssistantText.split(/\*Using tool:[^*]*\*/g).join('');
+              const uiText = (currentAssistantText || '').split(/\*Using tool:[^*]*\*/g).join('');
 
               setMessages(prev => prev.map(m =>
                 m.id === idToUpdate
@@ -222,8 +222,6 @@ export default function App() {
     
     // Also trigger the visual chat generation so you see the text bubbles
     setIsGenerating(true); 
-    // Do NOT return here; let the rest of the function run 
-    // so it generates the streaming text response in the UI.
   }
 }
 
