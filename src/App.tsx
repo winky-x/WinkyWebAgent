@@ -60,7 +60,7 @@ export default function App() {
                 setMessages(prev => prev.filter(m => m.id !== currentUserMessageId));
               }
 
-              const uiText = (currentAssistantText || '').split(/\*Using tool:[^*]*\*/g).join(''); \
+              const uiText = (currentAssistantText || '').split(/\*Using tool:[^*]*\*/g).join(''); 
 
               setMessages(prev => [
                 ...prev.map(m => m.role === 'user' ? { ...m, status: 'read' as const } : m),
