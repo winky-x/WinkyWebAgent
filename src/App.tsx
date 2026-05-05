@@ -61,7 +61,8 @@ export default function App() {
                 currentUserText = '';
               }
 
-              const uiText = currentAssistantText.split(/\*Using tool:[^*]*\*/g).join('');
+              // Add a fallback empty string to prevent crashes if currentAssistantText is undefined
+              const uiText = (currentAssistantText || '').split(/\*Using tool:[^*]*\*/g).join('');
 
               setMessages(prev => {
                 const updatedPrev = prev.map(m => m.role === 'user' ? { ...m, status: 'read' as const } : m);
@@ -215,11 +216,16 @@ export default function App() {
     setMessages((prev) => [...prev, userMessage]);
 
     if (voiceMode && liveSessionRef.current) {
-      if (text.trim()) {
-        liveSessionRef.current.sendText(text);
-      }
-      return;
-    }
+  if (text.trim()) {
+    // Send to live session for voice/multimodal
+    liveSessionRef.current.sendText(text);
+    
+    // Also trigger the visual chat generation so you see the text bubbles
+    setIsGenerating(true); 
+    // Do NOT return here; let the rest of the function run 
+    // so it generates the streaming text response in the UI.
+  }
+}
 
     setIsGenerating(true);
 
