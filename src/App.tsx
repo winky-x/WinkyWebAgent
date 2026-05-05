@@ -22,10 +22,12 @@ export default function App() {
   const [isMuted, setIsMuted] = useState(false);
   const [selectedTool, setSelectedTool] = useState<string>('');
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const chatSessionRef = useRef(new ChatSession());
-  const liveSessionRef = useRef<LiveSession | null>(null);
   const currentAudioSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  // Add these refs to track streaming text without crashing
+  const currentAssistantMessageId = useRef<string>('');
+  const currentAssistantText = useRef<string>('');
+  const currentUserMessageId = useRef<string>('');
+  const currentUserText = useRef<string>('');
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -35,110 +37,82 @@ export default function App() {
     scrollToBottom();
   }, [messages]);
 
-  useEffect(() => {
-    chatSessionRef.current = new ChatSession();
-    if (voiceMode) {
-      if (!liveSessionRef.current) {
-        liveSessionRef.current = new LiveSession();
+useEffect(() => {
+    if (voiceMode && liveSessionRef.current) {
+      liveSessionRef.current.onMessage = (msg) => {
+        if (msg.role === 'assistant') {
+          // Assistant Logic
+          if (!currentAssistantMessageId.current) {
+            currentAssistantMessageId.current = crypto.randomUUID();
+            currentAssistantText.current = msg.text || '';
 
-        let currentAssistantMessageId = '';
-        let currentAssistantText = '';
-        let currentUserMessageId = '';
-        let currentUserText = '';
-
-        liveSessionRef.current.onMessage = (msg) => {
-          if (msg.role === 'assistant') {
-            // 1. Safe extraction: ensure text is never undefined
-            const incomingText = msg.text || '';
-
-            if (!currentAssistantMessageId) {
-              currentAssistantMessageId = crypto.randomUUID();
-              currentAssistantText = incomingText;
-
-              // Clean previous user messages if they are empty
-              if (currentUserMessageId && !currentUserText.trim()) {
-                setMessages(prev => prev.filter(m => m.id !== currentUserMessageId));
-              }
-
-              const uiText = (currentAssistantText || '').split(/\*Using tool:[^*]*\*/g).join(''); 
-
-              setMessages(prev => [
-                ...prev.map(m => m.role === 'user' ? { ...m, status: 'read' as const } : m),
-                {
-                  id: currentAssistantMessageId,
-                  role: 'assistant',
-                  text: uiText,
-                  isStreaming: !msg.isFinal,
-                  timestamp: new Date()
-                }
-              ]);
-
-              setIsSpeaking(true);
-            } else {
-              currentAssistantText += incomingText;
-              const uiText = (currentAssistantText || '').split(/\*Using tool:[^*]*\*/g).join('');
-
-              setMessages(prev => prev.map(m =>
-                m.id === currentAssistantMessageId
-                  ? { ...m, text: uiText, isStreaming: !msg.isFinal }
-                  : m
-              ));
+            // Clean up empty user messages
+            if (currentUserMessageId.current && !currentUserText.current.trim()) {
+              setMessages(prev => prev.filter(m => m.id !== currentUserMessageId.current));
             }
-            if (msg.isFinal) {
-              currentAssistantMessageId = '';
-              currentAssistantText = '';
-              setIsSpeaking(false);
-            }
-          }
-        } else if (msg.role === 'user') {
-          if (!currentUserMessageId) {
-            currentUserMessageId = crypto.randomUUID();
-            currentUserText = msg.text || '';
+            
+            currentUserMessageId.current = '';
+            currentUserText.current = '';
 
-            if (currentAssistantMessageId) {
-              const idToRemove = currentAssistantMessageId;
-              if (!currentAssistantText.trim()) {
-                setMessages(prev => prev.filter(m => m.id !== idToRemove));
-              }
-              currentAssistantMessageId = '';
-              currentAssistantText = '';
-              setIsSpeaking(false);
-            }
-
-            setMessages(prev => [...prev, {
-              id: currentUserMessageId,
-              role: 'user',
-              text: currentUserText,
-              isStreaming: !msg.isFinal,
-              timestamp: new Date(),
-              status: 'sent'
-            }]);
+            const uiText = (currentAssistantText.current || '').split(/\*Using tool:[^*]*\*/g).join('');
+            setMessages(prev => {
+              const updatedPrev = prev.map(m => m.role === 'user' ? { ...m, status: 'read' as const } : m);
+              return [...updatedPrev, {
+                id: currentAssistantMessageId.current,
+                role: 'assistant',
+                text: uiText,
+                isStreaming: !msg.isFinal,
+                timestamp: new Date()
+              }];
+            });
+            setIsSpeaking(true);
           } else {
-            const idToUpdate = currentUserMessageId;
-
-            if (msg.isTranscription) {
-              // Speech-to-text usually sends the full phrase as it updates
-              if (msg.text) {
-                currentUserText = msg.text;
-              }
-            } else {
-              currentUserText += (msg.text || '');
-            }
+            currentAssistantText.current += (msg.text || '');
+            const uiText = (currentAssistantText.current || '').split(/\*Using tool:[^*]*\*/g).join('');
 
             setMessages(prev => prev.map(m =>
-              m.id === idToUpdate
-                ? { ...m, text: currentUserText, isStreaming: !msg.isFinal }
+              m.id === currentAssistantMessageId.current
+                ? { ...m, text: uiText, isStreaming: !msg.isFinal }
                 : m
             ));
           }
 
           if (msg.isFinal) {
-            const idToRemove = currentUserMessageId;
-            if (!currentUserText.trim()) {
-              setMessages(prev => prev.filter(m => m.id !== idToRemove));
+            currentAssistantMessageId.current = '';
+            currentAssistantText.current = '';
+            setIsSpeaking(false);
+          }
+        } else if (msg.role === 'user') {
+          // User Logic (Voice Mode Echo)
+          if (!currentUserMessageId.current) {
+            currentUserMessageId.current = crypto.randomUUID();
+            currentUserText.current = msg.text || '';
+
+            setMessages(prev => [...prev, {
+              id: currentUserMessageId.current,
+              role: 'user',
+              text: currentUserText.current,
+              isStreaming: !msg.isFinal,
+              timestamp: new Date(),
+              status: 'sent'
+            }]);
+          } else {
+            if (msg.isTranscription) {
+              currentUserText.current = msg.text || '';
+            } else {
+              currentUserText.current += (msg.text || '');
             }
-            currentUserMessageId = '';
-            currentUserText = '';
+
+            setMessages(prev => prev.map(m =>
+              m.id === currentUserMessageId.current
+                ? { ...m, text: currentUserText.current, isStreaming: !msg.isFinal }
+                : m
+            ));
+          }
+
+          if (msg.isFinal) {
+            currentUserMessageId.current = '';
+            currentUserText.current = '';
           }
         }
       };
@@ -149,13 +123,13 @@ export default function App() {
 
       liveSessionRef.current.onInterrupted = () => {
         setIsSpeaking(false);
-        currentAssistantMessageId = '';
-        currentAssistantText = '';
+        currentAssistantMessageId.current = '';
+        currentAssistantText.current = '';
       };
 
       liveSessionRef.current.onError = (error) => {
         console.error("Live API Error:", error);
-        toast.error(error.message || "Voice connection error. Please try again.");
+        toast.error(error.message || "Voice connection error.");
         setIsSpeaking(false);
         setVoiceMode(false);
       };
@@ -163,21 +137,16 @@ export default function App() {
       liveSessionRef.current.setMuted(isMuted);
       liveSessionRef.current.connect();
     } else {
-      liveSessionRef.current.setMuted(isMuted);
+      if (liveSessionRef.current) {
+        liveSessionRef.current.disconnect();
+      }
     }
-  } else {
-    if(liveSessionRef.current) {
-    liveSessionRef.current.disconnect();
-    liveSessionRef.current = null;
-  }
-}
 
-return () => {
-  if (liveSessionRef.current) {
-    liveSessionRef.current.disconnect();
-    liveSessionRef.current = null;
-  }
-};
+    return () => {
+      if (liveSessionRef.current) {
+        liveSessionRef.current.disconnect();
+      }
+    };
   }, [voiceMode, isMuted]);
 
 const stopSpeaking = () => {
@@ -210,9 +179,9 @@ const handleSend = async (text: string, attachments: Attachment[]) => {
     if (text.trim()) {
       // Send to live session for voice/multimodal
       liveSessionRef.current.sendText(text);
-
-      // Also trigger the visual chat generation so you see the text bubbles
-      setIsGenerating(true);
+      // We return here because the onMessage handler we fixed above 
+      // will handle creating the chat bubble and the response.
+      return; 
     }
   }
 
@@ -250,7 +219,7 @@ const handleSend = async (text: string, attachments: Attachment[]) => {
       if (chunk.thought) finalThought += chunk.thought;
 
 
-      const uiText = finalText.split(/\*Using tool:[^*]*\*/g).join('');
+      const uiText = (finalText || '').split(/\*Using tool:[^*]*\*/g).join('');
 
       setMessages((prev) =>
         prev.map((msg) =>
