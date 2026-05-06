@@ -132,10 +132,10 @@ private async *handleGoogleStream(options: GenerateOptions): AsyncGenerator<Stre
         };
       }
 
-      const safeModelId = options.modelId || 'gemini-3.1-pro-preview';
+     const safeModelId = options.modelId || 'gemini-3.1-flash-preview';
     
 
-      if (!options.voiceMode && safeModelId.includes('thinking') || safeModelId === 'gemini-3.1-pro-preview) {
+      if (!options.voiceMode && safeModelId.includes('thinking') || safeModelId === 'gemini-3.1-flash-preview') {
         config.thinkingConfig = { 
           thinkingLevel: ThinkingLevel.HIGH,
           includeThoughts: true 
