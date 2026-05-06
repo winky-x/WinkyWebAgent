@@ -321,6 +321,9 @@ return (
             {voiceMode ? 'Voice Mode Active' : 'Thinking Mode Active'}
           </p>
         </div>
+      </div>
+
+      <div className="flex items-center gap-4">
         <button 
           onClick={connectRobot}
           className="px-4 py-2 bg-zinc-900 text-white rounded-lg flex items-center gap-2"
@@ -328,9 +331,7 @@ return (
           <Cable className="w-4 h-4" />
           Connect Winky
         </button>
-      </div>
-
-      <div className="flex items-center gap-4">
+        
         {messages.length > 0 && (
           <button
             onClick={clearChat}
