@@ -195,24 +195,22 @@ export class LiveSession {
     this.nextStartTime = startTime + buffer.duration;
   }
 
-sendText(text: string) {
-    if (this.sessionPromise && this.isConnected) {
-      this.sessionPromise.then(session => {
-        const payload = {
-          clientContent: {
-            turns: [{ role: 'user', parts: [{ text }] }],
-            turnComplete: true
-          }
-        };
-        
-        // The new SDK uses .send() for structural payloads like text, 
-        // leaving sendRealtimeInput exclusively for raw audio buffer chunks.
-        if (typeof session.send === 'function') {
-           session.send(payload);
-        } else if (typeof session.sendRealtimeInput === 'function') {
-           session.sendRealtimeInput(payload);
+async sendText(text: string) {
+    if (!this.sessionPromise || !this.isConnected) return;
+    
+    try {
+      const session = await this.sessionPromise;
+      
+      // The Live API strictly expects this nested structure
+      await session.send({
+        clientContent: {
+          turns: [{ role: 'user', parts: [{ text }] }],
+          turnComplete: true
         }
       });
+    } catch (error) {
+      console.error("Failed to send text to Live API:", error);
+      this.onError(new Error("Failed to send text in Voice Mode."));
     }
   }
   
