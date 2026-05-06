@@ -125,12 +125,17 @@ private async *handleGoogleStream(options: GenerateOptions): AsyncGenerator<Stre
     while (!isDone) {
       const config: any = {
         systemInstruction: SYSTEM_INSTRUCTION,
-        safetySettings: [{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" }]
+        safetySettings: [{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" }],
+        tools: [] // Initialize as an empty array
       };
 
+      // 1. Add your custom function tools (Calculator, etc.)
       if (toolDeclarations && toolDeclarations.length > 0) {
-        config.tools = [{ functionDeclarations: toolDeclarations }];
+        config.tools.push({ functionDeclarations: toolDeclarations });
       }
+
+      // 2. Add Google Search Grounding!
+      config.tools.push({ googleSearch: {} });
 
       if (options.selectedTool && config.tools) {
         config.toolConfig = {
@@ -139,6 +144,7 @@ private async *handleGoogleStream(options: GenerateOptions): AsyncGenerator<Stre
       }
 
       const safeModelId = options.modelId || 'gemini-3.1-flash-lite-preview';
+    
 
       if (!options.voiceMode && safeModelId.includes('thinking') || safeModelId === 'gemini-3.1-flash-lite-preview') {
         config.thinkingConfig = { 
