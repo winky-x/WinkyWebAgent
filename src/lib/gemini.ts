@@ -98,9 +98,11 @@ export class ChatSession {
     }
   }
 
-  private async *handleGoogleStream(options: GenerateOptions): AsyncGenerator<StreamChunk> {
-    // API Key Rotation Logic
-    const activeKey = GEMINI_KEYS[0] || "";
+private async *handleGoogleStream(options: GenerateOptions): AsyncGenerator<StreamChunk> {
+    // 1. Unify the API Key grabber with Voice Mode
+    const activeKey = getGeminiKey();
+    if (!activeKey) throw new Error("Please provide a valid API key in your .env file.");
+    
     const ai = new GoogleGenAI({ apiKey: activeKey });
     
     let isDone = false;
@@ -108,13 +110,11 @@ export class ChatSession {
     let accumulatedThought = "";
 
     while (!isDone) {
-      // 1. Safe Tool & Config Initialization
       const config: any = {
         systemInstruction: SYSTEM_INSTRUCTION,
         safetySettings: [{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" }]
       };
 
-      // Only add tools if they actually exist to prevent the "Cannot convert undefined" crash
       if (toolDeclarations && toolDeclarations.length > 0) {
         config.tools = [{ functionDeclarations: toolDeclarations }];
       }
@@ -125,11 +125,10 @@ export class ChatSession {
         };
       }
 
-      // 2. Safe modelId fallback to prevent the "includes" crash
-      const safeModelId = options.modelId || 'gemini-2.5-pro';
+      // 2. Force the Gemini 2.5 Pro model for Thinking Mode
+      const safeModelId = options.modelId || 'gemini-3.1-flash-lite-preview-0514';
 
-      // Gemini 3 Thinking Configuration
-      if (!options.voiceMode && safeModelId.includes('thinking')) {
+      if (!options.voiceMode && safeModelId.includes('thinking') || safeModelId === 'gemini-3.1-flash-lite-preview-0514') {
         config.thinkingConfig = { 
           thinkingLevel: ThinkingLevel.HIGH,
           includeThoughts: true 
@@ -141,6 +140,7 @@ export class ChatSession {
         contents: this.history,
         config,
       });
+
 
       let currentLoopText = "";
       let currentLoopThought = "";
