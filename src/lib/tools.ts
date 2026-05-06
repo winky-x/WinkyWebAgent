@@ -15,7 +15,7 @@ export const toolDeclarations: FunctionDeclaration[] = [
   },
   {
     name: "get_accurate_weather",
-    description: "Purpose: Real-time, highly accurate weather data retrieval. Target Mode: Voice/Thinking Mode. Expected Behavior: Accepts a location and returns current conditions, temperature, precipitation chance, and a short forecast.",
+    description: "Purpose: Real-time, highly accurate weather data retrieval. Target Mode: Voice/Thinking Mode. Expected Behavior: Accepts a location and returns current conditions, temperature, precipitation, and forecasts.",
     parameters: {
       type: Type.OBJECT,
       properties: {
@@ -26,7 +26,7 @@ export const toolDeclarations: FunctionDeclaration[] = [
   },
   {
     name: "evaluate_math_expression",
-    description: "Purpose: Accurate calculations without relying on LLM hallucination. Target Mode: Voice/Thinking Mode. Expected Behavior: Safely evaluates complex mathematical expressions and returns the exact numeric result.",
+    description: "Purpose: Accurate calculations without relying on LLM hallucination. Target Mode: Voice/Thinking Mode. Expected Behavior: Safely evaluates complex mathematical expressions and returns precise results.",
     parameters: {
       type: Type.OBJECT,
       properties: {
@@ -47,7 +47,7 @@ export const toolDeclarations: FunctionDeclaration[] = [
   },
   {
     name: "get_crypto_price",
-    description: "Purpose: Fetches the current price of a cryptocurrency in USD. Target Mode: Voice/Thinking Mode. Expected Behavior: Accepts a cryptocurrency ID and returns its current market price in US Dollars.",
+    description: "Purpose: Fetches the current price of a cryptocurrency in USD. Target Mode: Voice/Thinking Mode. Expected Behavior: Accepts a cryptocurrency ID and returns its current market price in USD.",
     parameters: {
       type: Type.OBJECT,
       properties: {
@@ -61,7 +61,7 @@ export const toolDeclarations: FunctionDeclaration[] = [
 export const executeTool = async (name: string, args: any): Promise<any> => {
   try {
     switch (name) {
-      case "control_robot_hardware": { // Fixed name mismatch
+      case "control_robot_hardware": {
         const port = getGlobalPort();
         
         if (!port || !port.writable) {
@@ -71,7 +71,6 @@ export const executeTool = async (name: string, args: any): Promise<any> => {
         try {
           const writer = port.writable.getWriter();
           const encoder = new TextEncoder();
-          // Use 'command' as defined in your toolDeclaration[cite: 5]
           await writer.write(encoder.encode(args.command)); 
           writer.releaseLock();
           
@@ -80,13 +79,6 @@ export const executeTool = async (name: string, args: any): Promise<any> => {
           return { error: `Hardware write error: ${err.message}` };
         }
       }
-      
-      // ... keep other cases ...
-    }
-  } catch (err: any) {
-    return { error: `Unexpected Error: ${err.message}` };
-  }
-};
 
       case "get_accurate_weather": {
         try {
@@ -95,7 +87,7 @@ export const executeTool = async (name: string, args: any): Promise<any> => {
           if (!geoData.results || geoData.results.length === 0) return { error: "Location not found" };
           const { latitude, longitude, name, country, timezone } = geoData.results[0];
 
-          const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,showers,snowfall,weather_code,cloud_cover,pressure_msl,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_sum&timezone=${encodeURIComponent(timezone || 'auto')}`);
+          const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=${timezone}`);
           if (!weatherRes.ok) throw new Error("Weather API error");
           const weatherData = await weatherRes.json();
 
@@ -110,10 +102,8 @@ export const executeTool = async (name: string, args: any): Promise<any> => {
         }
       }
 
-
       case "evaluate_math_expression": {
         try {
-          // Extremely safe evaluation using Function, stripping everything except math chars
           const sanitized = args.expression.replace(/[^0-9+\-*/(). %]/g, '');
           if (!sanitized) return { error: "Invalid mathematical expression" };
           const result = new Function(`return (${sanitized})`)();
