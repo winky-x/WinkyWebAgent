@@ -201,13 +201,26 @@ async sendText(text: string) {
     try {
       const session = await this.sessionPromise;
       
-      // The Live API strictly expects this nested structure
-      await session.send({
+      // The exact payload structure the Live API requires for text
+      const payload = {
         clientContent: {
           turns: [{ role: 'user', parts: [{ text }] }],
           turnComplete: true
         }
-      });
+      };
+
+      // Smart routing: Check what methods are available on your specific SDK version
+      if (typeof session.send === 'function') {
+        // Modern SDKs use .send()
+        await session.send(payload);
+      } else if (typeof session.sendRealtimeInput === 'function') {
+        // Older/preview SDKs overloaded sendRealtimeInput for both text and audio
+        await session.sendRealtimeInput(payload);
+      } else {
+        // If neither exists, log what we DO have so we can debug
+        console.error("Available session methods:", Object.keys(session));
+        throw new Error("Could not find a valid send method on the session object.");
+      }
     } catch (error) {
       console.error("Failed to send text to Live API:", error);
       this.onError(new Error("Failed to send text in Voice Mode."));
