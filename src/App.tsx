@@ -290,6 +290,18 @@ const clearChat = () => {
   chatSessionRef.current = new ChatSession();
   toast.success("Chat cleared");
 };
+  
+  const connectRobot = async () => {
+  try {
+    const port = await navigator.serial.requestPort(); // Browser allows this because of the click
+    await port.open({ baudRate: 9600 });
+    setGlobalPort(port); // Save it for the AI to use later
+    toast.success("Robot connected successfully!");
+  } catch (err) {
+    console.error("Connection failed", err);
+    toast.error("Failed to connect to hardware.");
+  }
+};
 
 return (
   <div className="flex flex-col h-screen bg-zinc-50 font-sans">
@@ -302,6 +314,13 @@ return (
             className={`w-6 h-6 object-contain transition-transform duration-500 ${isSpeaking ? 'scale-110' : 'group-hover:scale-110'}`}
           />
         </div>
+        <button 
+          onClick={connectRobot}
+          className="px-4 py-2 bg-zinc-900 text-white rounded-lg flex items-center gap-2"
+        >
+          <Cable className="w-4 h-4" />
+          Connect Winky
+        </button>
         <div>
           <h1 className="text-xl font-bold text-zinc-900 tracking-tight font-display">Winky AI</h1>
           <p className="text-xs text-zinc-500 flex items-center gap-1 font-medium">
