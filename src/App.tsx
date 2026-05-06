@@ -172,14 +172,18 @@ const typeTextToInput = (text: string) => {
   setInputText(text);
 };
 
-const handleSend = async (text: string, attachments: Attachment[]) => {
+const handleSend = async (text: string, attachments: Attachment[] = []) => {
   stopSpeaking();
+
+  // Ensure we never pass undefined text or attachments
+  const safeText = text || '';
+  const safeAttachments = attachments || [];
 
   const userMessage: Message = {
     id: crypto.randomUUID(),
     role: 'user',
-    text,
-    attachments,
+    text: safeText,
+    attachments: safeAttachments,
     timestamp: new Date(),
     status: 'sent'
   };
@@ -187,11 +191,9 @@ const handleSend = async (text: string, attachments: Attachment[]) => {
   setMessages((prev) => [...prev, userMessage]);
 
   if (voiceMode && liveSessionRef.current) {
-    if (text.trim()) {
+    if (safeText.trim()) {
       // Send to live session for voice/multimodal
-      liveSessionRef.current.sendText(text);
-      // We return here because the onMessage handler we fixed above 
-      // will handle creating the chat bubble and the response.
+      liveSessionRef.current.sendText(safeText);
       return; 
     }
   }
@@ -215,20 +217,20 @@ const handleSend = async (text: string, attachments: Attachment[]) => {
 
   const currentSelectedTool = selectedTool;
   setSelectedTool('');
+  
   try {
-    const stream = chatSessionRef.current.sendMessageStream(text, attachments, {
+    // 👇 Ensure chatSessionRef is used safely and pass '' instead of undefined
+    const stream = chatSessionRef.current!.sendMessageStream(safeText, safeAttachments, {
       voiceMode,
-      selectedTool: currentSelectedTool || undefined
+      selectedTool: currentSelectedTool || '' 
     });
 
     let finalText = "";
-    let finalThought = ""; // New: Track the monologue separately
+    let finalThought = ""; 
 
     for await (const chunk of stream) {
-      // 1. Capture the two different types of data from the stream
       if (chunk.text) finalText += chunk.text;
       if (chunk.thought) finalThought += chunk.thought;
-
 
       const uiText = (finalText || '').split(/\*Using tool:[^*]*\*/g).join('');
 
@@ -238,7 +240,7 @@ const handleSend = async (text: string, attachments: Attachment[]) => {
             ? {
               ...msg,
               text: uiText,
-              thought: finalThought, // THIS sends it to the hidden box!
+              thought: finalThought, 
               isThinking: chunk.isThinking,
               isStreaming: !chunk.isDone,
               groundingChunks: chunk.groundingChunks || msg.groundingChunks,
