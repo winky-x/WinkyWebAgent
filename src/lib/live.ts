@@ -1,8 +1,8 @@
 import { GoogleGenAI, LiveServerMessage, Modality } from "@google/genai";
 import { toolDeclarations, executeTool } from "./tools";
 import { SYSTEM_INSTRUCTION } from "./prompt";
-
-const ai = new GoogleGenAI({ apiKey: (import.meta as any).env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY });
+// 1. Import the shared key logic
+import { getGeminiKey } from "./gemini"; 
 
 export class LiveSession {
   private sessionPromise: Promise<any> | null = null;
@@ -25,6 +25,15 @@ export class LiveSession {
 
   async connect() {
     if (this.isConnected) return;
+    
+    // 2. Fetch the key dynamically when connecting
+    const key = getGeminiKey();
+    if (!key) {
+      this.onError(new Error("Please provide a valid API key."));
+      return;
+    }
+
+    const ai = new GoogleGenAI({ apiKey: key });
     
     this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
     this.nextStartTime = this.audioContext.currentTime;
@@ -201,7 +210,6 @@ async sendText(text: string) {
     try {
       const session = await this.sessionPromise;
       
-      // The exact payload structure the Live API requires for text
       const payload = {
         clientContent: {
           turns: [{ role: 'user', parts: [{ text }] }],
@@ -209,24 +217,22 @@ async sendText(text: string) {
         }
       };
 
-      // Smart routing: Check what methods are available on your specific SDK version
+      // 3. Bulletproof SDK method fallback
       if (typeof session.send === 'function') {
-        // Modern SDKs use .send()
         await session.send(payload);
+      } else if (typeof session.sendClientContent === 'function') {
+        await session.sendClientContent(payload.clientContent);
       } else if (typeof session.sendRealtimeInput === 'function') {
-        // Older/preview SDKs overloaded sendRealtimeInput for both text and audio
         await session.sendRealtimeInput(payload);
       } else {
-        // If neither exists, log what we DO have so we can debug
-        console.error("Available session methods:", Object.keys(session));
-        throw new Error("Could not find a valid send method on the session object.");
+        throw new Error("No valid send method found on session.");
       }
     } catch (error) {
       console.error("Failed to send text to Live API:", error);
       this.onError(new Error("Failed to send text in Voice Mode."));
     }
   }
-  
+
   disconnect() {
     this.isConnected = false;
     if (this.scriptProcessor) {
