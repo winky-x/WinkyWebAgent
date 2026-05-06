@@ -51,32 +51,17 @@ export interface GenerateOptions {
 // Environment & API Key Configuration
 // ============================================================================
 
-const getEnvVar = (key: string): string => {
+const getGeminiKey = (): string => {
+  // Vite requires strict static string references (import.meta.env.VITE_...)
   if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
-    if ((import.meta as any).env[key]) return (import.meta as any).env[key];
+    return (import.meta as any).env.VITE_GEMINI_API_KEY || (import.meta as any).env.VITE_GEMINI_API_KEY_2 || "";
   }
-  return typeof process !== 'undefined' && process.env[key] ? (process.env[key] as string) : "";
+  // Fallback for Node/Next.js environments
+  if (typeof process !== 'undefined' && process.env) {
+    return process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || "";
+  }
+  return "";
 };
-
-const GEMINI_KEYS = [
-  getEnvVar("VITE_GEMINI_API_KEY") || getEnvVar("GEMINI_API_KEY"),
-  getEnvVar("VITE_GEMINI_API_KEY_2") || getEnvVar("GEMINI_API_KEY_2")
-].filter(Boolean);
-
-const OPENROUTER_KEYS = [
-  getEnvVar("VITE_OPENROUTER_API_KEY") || getEnvVar("OPENROUTER_API_KEY"),
-  getEnvVar("VITE_OPENROUTER_API_KEY_2") || getEnvVar("OPENROUTER_API_KEY_2")
-].filter(Boolean);
-
-const createOpenRouterClient = (apiKey: string) => new OpenAI({
-  baseURL: "https://openrouter.ai/api/v1",
-  apiKey: apiKey,
-  dangerouslyAllowBrowser: true,
-  defaultHeaders: { 
-    "HTTP-Referer": typeof window !== 'undefined' ? window.location.origin : "https://winky.ai", 
-    "X-Title": "Winky AI Agent" 
-  }
-});
 
 // ============================================================================
 // Main Chat Session Manager
