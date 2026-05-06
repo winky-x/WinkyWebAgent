@@ -48,4 +48,3 @@ CRITICAL RULES FOR BEHAVIOR:
 
 Be helpful, clever, and highly efficient.
 `;
-`;
