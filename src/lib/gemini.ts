@@ -113,7 +113,6 @@ export class ChatSession {
   }
 
 private async *handleGoogleStream(options: GenerateOptions): AsyncGenerator<StreamChunk> {
-    // 1. Unify the API Key grabber with Voice Mode
     const activeKey = getGeminiKey();
     if (!activeKey) throw new Error("Please provide a valid API key in your .env file.");
     
@@ -139,7 +138,6 @@ private async *handleGoogleStream(options: GenerateOptions): AsyncGenerator<Stre
         };
       }
 
-      // 2. Force the Gemini 2.5 Pro model for Thinking Mode
       const safeModelId = options.modelId || 'gemini-3.1-flash-lite-preview';
 
       if (!options.voiceMode && safeModelId.includes('thinking') || safeModelId === 'gemini-3.1-flash-lite-preview') {
@@ -155,10 +153,9 @@ private async *handleGoogleStream(options: GenerateOptions): AsyncGenerator<Stre
         config,
       });
 
-
       let currentLoopText = "";
       let currentLoopThought = "";
-      let functionCalls: any[] = [];
+      let functionCallParts: any[] = []; // Fix: Store RAW parts to keep the thought_signature
       let groundingChunks: any[] | null = null;
 
       for await (const chunk of stream) {
@@ -190,28 +187,52 @@ private async *handleGoogleStream(options: GenerateOptions): AsyncGenerator<Stre
           };
         }
 
-        if (c.functionCalls?.length > 0) functionCalls = c.functionCalls;
+        // THE FIX: Safely extract the exact raw object so Gemini's internal IDs aren't lost
+        if (c.candidates?.[0]?.content?.parts) {
+          for (const part of c.candidates[0].content.parts) {
+            if (part.functionCall) {
+              const exists = functionCallParts.some(p => p.functionCall.name === part.functionCall.name);
+              if (!exists) {
+                functionCallParts.push(part);
+              }
+            }
+          }
+        }
       }
 
-      // Finalize history for this turn
+      // Finalize history using the preserved raw parts
       const modelParts: any[] = [];
       if (currentLoopText) modelParts.push({ text: currentLoopText });
       if (currentLoopThought) modelParts.push({ thought: currentLoopThought } as any);
-      if (functionCalls.length > 0) modelParts.push(...functionCalls.map(fc => ({ functionCall: fc })));
+      
+      if (functionCallParts.length > 0) {
+        modelParts.push(...functionCallParts);
+      }
       
       this.history.push({ role: "model", parts: modelParts });
 
-      if (functionCalls.length > 0) {
+      // Handle the tool execution
+      if (functionCallParts.length > 0) {
         const functionResponses = [];
-        for (const fc of functionCalls) {
+        for (const rawPart of functionCallParts) {
+          const fc = rawPart.functionCall;
           yield { 
             text: accumulatedText + currentLoopText + `\n\n*Using tool: ${fc.name}...*\n`, 
             thought: accumulatedThought + currentLoopThought, 
             isDone: false, 
             isThinking: true 
           };
+          
           const result = await executeTool(fc.name, fc.args);
-          functionResponses.push({ functionResponse: { name: fc.name, response: { content: result } } });
+          
+          // THE FIX PART 2: We must pass the fc.id back to Gemini so it knows which tool finished
+          functionResponses.push({ 
+            functionResponse: { 
+              name: fc.name, 
+              id: fc.id, 
+              response: { content: result } 
+            } 
+          });
         }
         this.history.push({ role: "user", parts: functionResponses });
         accumulatedText += currentLoopText + "\n\n";
