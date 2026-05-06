@@ -8,7 +8,7 @@ import { ChatInput } from '@/components/ChatInput';
 import { ChatMessage, Message } from '@/components/ChatMessage';
 import { ChatSession, Attachment, GenerateOptions, generateSpeech, playAudioBuffer } from '@/lib/gemini';
 import { LiveSession } from '@/lib/live';
-import { Bot, Sparkles, Volume2, BrainCircuit, ArrowRight, Zap, Trash2, Mic2, AudioLines, SquareDashedMousePointer, Component, Orbit, Spline, Globe } from 'lucide-react';
+import { Bot, Sparkles, Volume2, BrainCircuit, ArrowRight, Zap, Trash2, Mic2, AudioLines, SquareDashedMousePointer, Component, Orbit, Spline, Globe, Cable } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion } from 'motion/react';
 import { setGlobalPort } from './lib/robotManager';
