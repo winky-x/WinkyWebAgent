@@ -29,7 +29,9 @@ export default function App() {
   const currentUserMessageId = useRef<string>('');
   const currentUserText = useRef<string>('');
   
-  const messagesEndRef = useRef<HTMLDivElement>(null); 
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatSessionRef = useRef<ChatSession>(new ChatSession()); 
+  const liveSessionRef = useRef<LiveSession | null>(null); // Initialize however your LiveSession requires
   
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
