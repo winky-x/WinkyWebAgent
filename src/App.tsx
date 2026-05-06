@@ -28,7 +28,9 @@ export default function App() {
   const currentAssistantText = useRef<string>('');
   const currentUserMessageId = useRef<string>('');
   const currentUserText = useRef<string>('');
-
+  
+  const messagesEndRef = useRef<HTMLDivElement>(null); 
+  
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
