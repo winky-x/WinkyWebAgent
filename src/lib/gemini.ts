@@ -123,20 +123,28 @@ export class ChatSession {
     let accumulatedThought = "";
 
     while (!isDone) {
+      // 1. Safe Tool & Config Initialization
       const config: any = {
         systemInstruction: SYSTEM_INSTRUCTION,
-        tools: [{ functionDeclarations: toolDeclarations }],
         safetySettings: [{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" }]
       };
 
-      if (options.selectedTool) {
+      // Only add tools if they actually exist to prevent the "Cannot convert undefined" crash
+      if (toolDeclarations && toolDeclarations.length > 0) {
+        config.tools = [{ functionDeclarations: toolDeclarations }];
+      }
+
+      if (options.selectedTool && config.tools) {
         config.toolConfig = {
           functionCallingConfig: { mode: "ANY", allowedFunctionNames: [options.selectedTool] }
         };
       }
 
+      // 2. Safe modelId fallback to prevent the "includes" crash
+      const safeModelId = options.modelId || 'gemini-2.5-pro';
+
       // Gemini 3 Thinking Configuration
-      if (!options.voiceMode && options.modelId.includes('thinking')) {
+      if (!options.voiceMode && safeModelId.includes('thinking')) {
         config.thinkingConfig = { 
           thinkingLevel: ThinkingLevel.HIGH,
           includeThoughts: true 
@@ -144,7 +152,7 @@ export class ChatSession {
       }
 
       const stream = await ai.models.generateContentStream({
-        model: options.modelId,
+        model: safeModelId,
         contents: this.history,
         config,
       });
