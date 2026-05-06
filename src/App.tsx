@@ -314,13 +314,6 @@ return (
             className={`w-6 h-6 object-contain transition-transform duration-500 ${isSpeaking ? 'scale-110' : 'group-hover:scale-110'}`}
           />
         </div>
-        <button 
-          onClick={connectRobot}
-          className="px-4 py-2 bg-zinc-900 text-white rounded-lg flex items-center gap-2"
-        >
-          <Cable className="w-4 h-4" />
-          Connect Winky
-        </button>
         <div>
           <h1 className="text-xl font-bold text-zinc-900 tracking-tight font-display">Winky AI</h1>
           <p className="text-xs text-zinc-500 flex items-center gap-1 font-medium">
@@ -328,6 +321,13 @@ return (
             {voiceMode ? 'Voice Mode Active' : 'Thinking Mode Active'}
           </p>
         </div>
+        <button 
+          onClick={connectRobot}
+          className="px-4 py-2 bg-zinc-900 text-white rounded-lg flex items-center gap-2"
+        >
+          <Cable className="w-4 h-4" />
+          Connect Winky
+        </button>
       </div>
 
       <div className="flex items-center gap-4">
