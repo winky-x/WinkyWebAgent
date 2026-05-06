@@ -195,19 +195,27 @@ export class LiveSession {
     this.nextStartTime = startTime + buffer.duration;
   }
 
-  sendText(text: string) {
+sendText(text: string) {
     if (this.sessionPromise && this.isConnected) {
       this.sessionPromise.then(session => {
-        session.sendRealtimeInput({
+        const payload = {
           clientContent: {
             turns: [{ role: 'user', parts: [{ text }] }],
             turnComplete: true
           }
-        });
+        };
+        
+        // The new SDK uses .send() for structural payloads like text, 
+        // leaving sendRealtimeInput exclusively for raw audio buffer chunks.
+        if (typeof session.send === 'function') {
+           session.send(payload);
+        } else if (typeof session.sendRealtimeInput === 'function') {
+           session.sendRealtimeInput(payload);
+        }
       });
     }
   }
-
+  
   disconnect() {
     this.isConnected = false;
     if (this.scriptProcessor) {
