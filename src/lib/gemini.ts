@@ -51,21 +51,32 @@ export interface GenerateOptions {
 // Environment & API Key Configuration
 // ============================================================================
 
-const getGeminiKey = (): string => {
-  // 1. Try Vite's exposed variables (Requires VITE_ prefix in Vercel)
+import { GoogleGenAI, ThinkingLevel, Content } from "@google/genai";
+import { toolDeclarations, executeTool } from "./tools";
+import { SYSTEM_INSTRUCTION } from "./prompt";
+
+// ... (Keep your interfaces exactly the same) ...
+
+// ============================================================================
+// Environment & API Key Configuration
+// ============================================================================
+
+// 1. Export this function so live.ts can share it
+export const getGeminiKey = (): string => {
   if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
     const env = (import.meta as any).env;
     if (env.GEMINI_API_KEY) return env.GEMINI_API_KEY;
+    if (env.VITE_GEMINI_API_KEY) return env.VITE_GEMINI_API_KEY;
   }
   
-  // 2. Try Node/process fallback (for local Node environments)
   if (typeof process !== 'undefined' && process.env) {
     if (process.env.GEMINI_API_KEY) return process.env.GEMINI_API_KEY;
     if (process.env.VITE_GEMINI_API_KEY) return process.env.VITE_GEMINI_API_KEY;
   }
   
-  return ""; // Returns empty string if no key is found
+  return ""; 
 };
+
 // ============================================================================
 // Main Chat Session Manager
 // ============================================================================
