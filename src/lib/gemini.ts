@@ -167,9 +167,42 @@ private async *handleGoogleStream(options: GenerateOptions): AsyncGenerator<Stre
       for await (const chunk of stream) {
         const c = chunk as any;
         
-        if (c.candidates?.[0]?.groundingMetadata?.groundingChunks) {
-          groundingChunks = c.candidates[0].groundingMetadata.groundingChunks;
+        // Check if the AI used Google Search and returned metadata
+        if (c.candidates?.[0]?.groundingMetadata) {
+          const metadata = c.candidates[0].groundingMetadata;
+          groundingChunks = metadata.groundingChunks;
+          
+          // Apply inline citations if the AI provided grounding supports
+          if (metadata.groundingSupports && metadata.groundingChunks && c.text) {
+             let formattedText = c.text;
+             const supports = metadata.groundingSupports;
+             const chunks = metadata.groundingChunks;
+             
+             // Sort supports by endIndex descending so inserting links doesn't mess up text positioning
+             const sortedSupports = [...supports].sort(
+                (a, b) => (b.segment?.endIndex ?? 0) - (a.segment?.endIndex ?? 0)
+             );
+
+             for (const support of sortedSupports) {
+                const endIndex = support.segment?.endIndex;
+                if (endIndex === undefined || !support.groundingChunkIndices?.length) continue;
+
+                const citationLinks = support.groundingChunkIndices.map((i: number) => {
+                   const uri = chunks[i]?.web?.uri;
+                   return uri ? `[${i + 1}](${uri})` : null;
+                }).filter(Boolean);
+
+                if (citationLinks.length > 0) {
+                   const citationString = " " + citationLinks.join(", ");
+                   formattedText = formattedText.slice(0, endIndex) + citationString + formattedText.slice(endIndex);
+                }
+             }
+             
+             // Override the raw chunk text with our newly cited text
+             c.text = formattedText;
+          }
         }
+
 
         if (c.thought) {
           currentLoopThought += c.thought;
