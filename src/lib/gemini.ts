@@ -54,11 +54,11 @@ export interface GenerateOptions {
 const getGeminiKey = (): string => {
   // Vite requires strict static string references (import.meta.env.VITE_...)
   if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
-    return (import.meta as any).env.VITE_GEMINI_API_KEY || (import.meta as any).env.VITE_GEMINI_API_KEY_2 || "";
+    return (import.meta as any).env.GEMINI_API_KEY || (import.meta as any).env.GEMINI_API_KEY_2 || "";
   }
   // Fallback for Node/Next.js environments
   if (typeof process !== 'undefined' && process.env) {
-    return process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || "";
+    return process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY || "";
   }
   return "";
 };
