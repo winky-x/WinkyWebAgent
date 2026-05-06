@@ -25,17 +25,6 @@ export const toolDeclarations: FunctionDeclaration[] = [
     }
   },
   {
-    name: "read_webpage_content",
-    description: "Purpose: Deep diving into specific links found via search. Target Mode: Thinking Mode. Expected Behavior: Accepts a URL, scrapes the main article/text content, and returns the raw text. Essential for when the AI needs to read a full article to answer a question.",
-    parameters: {
-      type: Type.OBJECT,
-      properties: {
-        url: { type: Type.STRING, description: "URL of the webpage to read" }
-      },
-      required: ["url"]
-    }
-  },
-  {
     name: "evaluate_math_expression",
     description: "Purpose: Accurate calculations without relying on LLM hallucination. Target Mode: Voice/Thinking Mode. Expected Behavior: Safely evaluates complex mathematical expressions and returns the exact numeric result.",
     parameters: {
@@ -121,31 +110,6 @@ export const executeTool = async (name: string, args: any): Promise<any> => {
         }
       }
 
-      case "read_webpage_content": {
-        try {
-          const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(args.url)}`;
-          const res = await fetch(proxyUrl);
-          if (!res.ok) throw new Error("Network response was not ok");
-          const data = await res.json();
-          const html = data.contents;
-
-          // Very basic HTML to text extraction
-          let text = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, ' ')
-            .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, ' ')
-            .replace(/<[^>]+>/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim();
-
-          // Truncate to avoid massive payloads
-          if (text.length > 15000) {
-            text = text.substring(0, 15000) + "... [Content truncated]";
-          }
-
-          return { content: text };
-        } catch (e: any) {
-          return { error: `Error: Could not read webpage content from ${args.url}. Please inform the user.` };
-        }
-      }
 
       case "evaluate_math_expression": {
         try {
