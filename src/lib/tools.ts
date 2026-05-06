@@ -13,28 +13,6 @@ export const toolDeclarations: FunctionDeclaration[] = [
     }
   },
   {
-    name: "fast_google_search",
-    description: "Purpose: Quick fact-checking and immediate answers. Target Mode: Voice Mode. Expected Behavior: Performs a lightweight search and returns only the top snippet or a highly concise summary for quick, spoken replies.",
-    parameters: {
-      type: Type.OBJECT,
-      properties: {
-        query: { type: Type.STRING, description: "Search query" }
-      },
-      required: ["query"]
-    }
-  },
-  {
-    name: "detailed_google_search",
-    description: "Purpose: Deep research and comprehensive information gathering. Target Mode: Thinking Mode. Expected Behavior: Performs a deep search, returning multiple results, full snippets, and URLs. Ideal for complex queries requiring extensive context.",
-    parameters: {
-      type: Type.OBJECT,
-      properties: {
-        query: { type: Type.STRING, description: "Search query" }
-      },
-      required: ["query"]
-    }
-  },
-  {
     name: "get_accurate_weather",
     description: "Purpose: Real-time, highly accurate weather data retrieval. Target Mode: Voice/Thinking Mode. Expected Behavior: Accepts a location and returns current conditions, temperature, precipitation chance, and a short forecast.",
     parameters: {
@@ -108,58 +86,6 @@ export const executeTool = async (name: string, args: any): Promise<any> => {
     return { error: "Could not connect to Arduino. Is it plugged in?" };
   }
 }
-
-      case "fast_google_search": {
-        try {
-          // Using DuckDuckGo HTML via AllOrigins proxy for fast search
-          const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(`https://html.duckduckgo.com/html/?q=${args.query}`)}`;
-          const res = await fetch(proxyUrl);
-          if (!res.ok) throw new Error("Network response was not ok");
-          const data = await res.json();
-          const html = data.contents;
-
-          // Extract the first snippet
-          const snippetMatch = html.match(/<a class="result__snippet[^>]*>(.*?)<\/a>/i);
-          if (snippetMatch) {
-            const cleanSnippet = snippetMatch[1].replace(/<[^>]+>/g, '');
-            return { result: cleanSnippet };
-          }
-          return { result: "No concise answer found. Consider using detailed_google_search." };
-        } catch (e: any) {
-          return { error: "Error: Could not fetch search results. Please inform the user." };
-        }
-      }
-
-      case "detailed_google_search": {
-        try {
-          const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(`https://html.duckduckgo.com/html/?q=${args.query}`)}`;
-          const res = await fetch(proxyUrl);
-          if (!res.ok) throw new Error("Network response was not ok");
-          const data = await res.json();
-          const html = data.contents;
-
-          const results = [];
-          const regex = /<h2 class="result__title">.*?<a[^>]+href="([^"]+)"[^>]*>(.*?)<\/a>.*?<a class="result__snippet[^>]*>(.*?)<\/a>/gs;
-          let match;
-          let count = 0;
-
-          while ((match = regex.exec(html)) !== null && count < 5) {
-            results.push({
-              url: match[1],
-              title: match[2].replace(/<[^>]+>/g, '').trim(),
-              snippet: match[3].replace(/<[^>]+>/g, '').trim()
-            });
-            count++;
-          }
-
-          if (results.length > 0) {
-            return { results };
-          }
-          return { error: "No results found." };
-        } catch (e: any) {
-          return { error: "Error: Could not fetch detailed search results. Please inform the user." };
-        }
-      }
 
       case "get_accurate_weather": {
         try {
