@@ -140,9 +140,9 @@ private async *handleGoogleStream(options: GenerateOptions): AsyncGenerator<Stre
       }
 
       // 2. Force the Gemini 2.5 Pro model for Thinking Mode
-      const safeModelId = options.modelId || 'gemini-3.1-flash-lite-preview-0514';
+      const safeModelId = options.modelId || 'gemini-3.1-flash-lite-preview';
 
-      if (!options.voiceMode && safeModelId.includes('thinking') || safeModelId === 'gemini-3.1-flash-lite-preview-0514') {
+      if (!options.voiceMode && safeModelId.includes('thinking') || safeModelId === 'gemini-3.1-flash-lite-preview') {
         config.thinkingConfig = { 
           thinkingLevel: ThinkingLevel.HIGH,
           includeThoughts: true 
