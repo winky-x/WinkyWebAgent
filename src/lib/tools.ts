@@ -1,4 +1,5 @@
 import { Type, FunctionDeclaration } from "@google/genai";
+import { getGlobalPort } from './robotManager';
 
 export const toolDeclarations: FunctionDeclaration[] = [
   {
@@ -71,21 +72,32 @@ export const toolDeclarations: FunctionDeclaration[] = [
 export const executeTool = async (name: string, args: any): Promise<any> => {
   try {
     switch (name) {
-      case "control_robot_hardware": {
-  try {
-    // Request permission to use the USB port
-    const port = await navigator.serial.requestPort();
-    await port.open({ baudRate: 9600 });
-    
-    const writer = port.writable.getWriter();
-    await writer.write(new TextEncoder().encode(args.action));
-    
-    writer.releaseLock();
-    return { status: "Command sent to hardware", command: args.action };
-  } catch (err) {
-    return { error: "Could not connect to Arduino. Is it plugged in?" };
+      case "control_robot_hardware": { // Fixed name mismatch
+        const port = getGlobalPort();
+        
+        if (!port || !port.writable) {
+          return { error: "Robot not connected. Please click the 'Connect Robot' button in the UI first." };
+        }
+
+        try {
+          const writer = port.writable.getWriter();
+          const encoder = new TextEncoder();
+          // Use 'command' as defined in your toolDeclaration[cite: 5]
+          await writer.write(encoder.encode(args.command)); 
+          writer.releaseLock();
+          
+          return { status: "Success", sent: args.command };
+        } catch (err: any) {
+          return { error: `Hardware write error: ${err.message}` };
+        }
+      }
+      
+      // ... keep other cases ...
+    }
+  } catch (err: any) {
+    return { error: `Unexpected Error: ${err.message}` };
   }
-}
+};
 
       case "get_accurate_weather": {
         try {
