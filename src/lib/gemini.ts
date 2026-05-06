@@ -46,17 +46,6 @@ export interface GenerateOptions {
   provider: 'google' | 'openrouter';
   modelId: string;
 }
-
-// ============================================================================
-// Environment & API Key Configuration
-// ============================================================================
-
-import { GoogleGenAI, ThinkingLevel, Content } from "@google/genai";
-import { toolDeclarations, executeTool } from "./tools";
-import { SYSTEM_INSTRUCTION } from "./prompt";
-
-// ... (Keep your interfaces exactly the same) ...
-
 // ============================================================================
 // Environment & API Key Configuration
 // ============================================================================
