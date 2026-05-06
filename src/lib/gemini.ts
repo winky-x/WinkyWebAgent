@@ -52,17 +52,20 @@ export interface GenerateOptions {
 // ============================================================================
 
 const getGeminiKey = (): string => {
-  // Vite requires strict static string references (import.meta.env.VITE_...)
+  // 1. Try Vite's exposed variables (Requires VITE_ prefix in Vercel)
   if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
-    return (import.meta as any).env.GEMINI_API_KEY || (import.meta as any).env.GEMINI_API_KEY_2 || "";
+    const env = (import.meta as any).env;
+    if (env.GEMINI_API_KEY) return env.GEMINI_API_KEY;
   }
-  // Fallback for Node/Next.js environments
+  
+  // 2. Try Node/process fallback (for local Node environments)
   if (typeof process !== 'undefined' && process.env) {
-    return process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY || "";
+    if (process.env.GEMINI_API_KEY) return process.env.GEMINI_API_KEY;
+    if (process.env.VITE_GEMINI_API_KEY) return process.env.VITE_GEMINI_API_KEY;
   }
-  return "";
+  
+  return ""; // Returns empty string if no key is found
 };
-
 // ============================================================================
 // Main Chat Session Manager
 // ============================================================================
