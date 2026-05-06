@@ -23,15 +23,22 @@ export default function App() {
   const [selectedTool, setSelectedTool] = useState<string>('');
 
   const currentAudioSourceRef = useRef<AudioBufferSourceNode | null>(null);
-  // Add these refs to track streaming text without crashing
   const currentAssistantMessageId = useRef<string>('');
   const currentAssistantText = useRef<string>('');
   const currentUserMessageId = useRef<string>('');
   const currentUserText = useRef<string>('');
-  
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const chatSessionRef = useRef<ChatSession>(new ChatSession()); 
-  const liveSessionRef = useRef<LiveSession | null>(null); // Initialize however your LiveSession requires
+
+  // 👇 ADD THESE LINES to properly initialize the sessions 👇
+  const chatSessionRef = useRef<ChatSession | null>(null);
+  if (!chatSessionRef.current) {
+    chatSessionRef.current = new ChatSession();
+  }
+
+  const liveSessionRef = useRef<LiveSession | null>(null);
+  if (!liveSessionRef.current) {
+    liveSessionRef.current = new LiveSession();
+  }
   
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
