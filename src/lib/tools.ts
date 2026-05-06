@@ -93,7 +93,7 @@ export const toolDeclarations: FunctionDeclaration[] = [
 export const executeTool = async (name: string, args: any): Promise<any> => {
   try {
     switch (name) {
-      case "move_winky_robot": {
+      case "control_robot_hardware": {
   try {
     // Request permission to use the USB port
     const port = await navigator.serial.requestPort();
