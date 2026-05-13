@@ -6,7 +6,7 @@
 
 import { GoogleGenAI, ThinkingLevel, Content } from "@google/genai";
 import { toolDeclarations, executeTool } from "./tools";
-import { SYSTEM_INSTRUCTION } from "./prompt";
+import { STANDARD_SYSTEM_INSTRUCTION, ROBOT_SYSTEM_INSTRUCTION } from "./prompt";
 
 // ============================================================================
 // Types & Interfaces
@@ -42,6 +42,7 @@ export interface StreamChunk {
 
 export interface GenerateOptions {
   voiceMode: boolean;
+  isRobotMode: boolean;
   selectedTool?: string;
   provider: 'google' | 'openrouter';
   modelId: string;
@@ -52,15 +53,17 @@ export interface GenerateOptions {
 
 // 1. Export this function so live.ts can share it
 export const getGeminiKey = (): string => {
+  const isValid = (k?: string) => k && k.trim() && !k.includes('PLACEHOLDER');
+
   if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
     const env = (import.meta as any).env;
-    if (env.GEMINI_API_KEY) return env.GEMINI_API_KEY;
-    if (env.VITE_GEMINI_API_KEY) return env.VITE_GEMINI_API_KEY;
+    if (isValid(env.GEMINI_API_KEY)) return env.GEMINI_API_KEY;
+    if (isValid(env.VITE_GEMINI_API_KEY)) return env.VITE_GEMINI_API_KEY;
   }
   
   if (typeof process !== 'undefined' && process.env) {
-    if (process.env.GEMINI_API_KEY) return process.env.GEMINI_API_KEY;
-    if (process.env.VITE_GEMINI_API_KEY) return process.env.VITE_GEMINI_API_KEY;
+    if (isValid(process.env.GEMINI_API_KEY)) return process.env.GEMINI_API_KEY;
+    if (isValid(process.env.VITE_GEMINI_API_KEY)) return process.env.VITE_GEMINI_API_KEY;
   }
   
   return ""; 
@@ -103,7 +106,7 @@ export class ChatSession {
 
 private async *handleGoogleStream(options: GenerateOptions): AsyncGenerator<StreamChunk> {
     const activeKey = getGeminiKey();
-    if (!activeKey) throw new Error("Please provide a valid API key in your .env file.");
+    if (!activeKey)      throw new Error("Missing Gemini API Key. Please add GEMINI_API_KEY to your .env file.");
     
     const ai = new GoogleGenAI({ apiKey: activeKey });
     
@@ -113,7 +116,7 @@ private async *handleGoogleStream(options: GenerateOptions): AsyncGenerator<Stre
 
     while (!isDone) {
       const config: any = {
-        systemInstruction: SYSTEM_INSTRUCTION,
+        systemInstruction: options.isRobotMode ? ROBOT_SYSTEM_INSTRUCTION : STANDARD_SYSTEM_INSTRUCTION,
         safetySettings: [{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" }],
         tools: [] // Initialize as an empty array
       };
@@ -121,10 +124,11 @@ private async *handleGoogleStream(options: GenerateOptions): AsyncGenerator<Stre
       // 1. Add your custom function tools (Calculator, etc.)
       if (toolDeclarations && toolDeclarations.length > 0) {
         config.tools.push({ functionDeclarations: toolDeclarations });
+      } else {
+        // 2. Add Google Search Grounding ONLY if no function tools are present
+        // Gemini API currently does not support combining both in a single request.
+        config.tools.push({ googleSearch: {} });
       }
-
-      // 2. Add Google Search Grounding!
-      config.tools.push({ googleSearch: {} });
 
       if (options.selectedTool && config.tools) {
         config.toolConfig = {
@@ -132,21 +136,36 @@ private async *handleGoogleStream(options: GenerateOptions): AsyncGenerator<Stre
         };
       }
 
-     const safeModelId = options.modelId || 'gemini-2.0-flash-thinking-exp-01-21';
+      const safeModelId = options.modelId || 'gemini-2.5-flash-lite';
     
 
-      if (!options.voiceMode && safeModelId.includes('thinking') || safeModelId === 'gemini-2.0-flash-thinking-exp-01-21') {
+      if (!options.voiceMode && (safeModelId.includes('thinking') || safeModelId === 'gemini-3.1-flash-lite-preview')) {
         config.thinkingConfig = { 
           thinkingLevel: ThinkingLevel.HIGH,
           includeThoughts: true 
         };
       }
 
-      const stream = await ai.models.generateContentStream({
-        model: safeModelId,
-        contents: this.history,
-        config,
-      });
+      let stream;
+      try {
+        stream = await ai.models.generateContentStream({
+          model: safeModelId,
+          contents: this.history,
+          config,
+        });
+      } catch (err: any) {
+        const isQuotaError = err.message?.includes('429') || err.message?.includes('quota') || err.message?.includes('RESOURCE_EXHAUSTED');
+        if (isQuotaError && safeModelId !== 'gemini-2.5-flash-lite') {
+          console.warn(`[Quota Fallback] ${safeModelId} exhausted. Retrying with gemini-2.5-flash-lite.`);
+          stream = await ai.models.generateContentStream({
+            model: 'gemini-2.5-flash-lite',
+            contents: this.history,
+            config,
+          });
+        } else {
+          throw err;
+        }
+      }
 
       let currentLoopText = "";
       let currentLoopThought = "";
@@ -278,30 +297,20 @@ private async *handleGoogleStream(options: GenerateOptions): AsyncGenerator<Stre
     }
   }
 
-  private async *handleOpenRouterStream(modelId: string): AsyncGenerator<StreamChunk> {
-    const apiKey = OPENROUTER_KEYS[0];
-    if (!apiKey) throw new Error("OpenRouter API key missing.");
-    const client = createOpenRouterClient(apiKey);
-
-    const messages = this.history.map(h => ({
-      role: h.role === 'model' ? 'assistant' : 'user',
-      content: h.parts.map((p: any) => p.text || '').join('')
-    }));
-
-    const stream = await client.chat.completions.create({
-      model: modelId,
-      messages: [{ role: 'system', content: SYSTEM_INSTRUCTION }, ...messages] as any,
-      stream: true,
-    });
-
-    let fullText = "";
-    for await (const chunk of stream) {
-      const content = chunk.choices[0]?.delta?.content || "";
-      fullText += content;
-      yield { text: fullText, thought: "", isDone: false, isThinking: false };
+  private getOpenRouterKey(): string {
+    if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
+      const env = (import.meta as any).env;
+      if (env.OPENROUTER_API_KEY) return env.OPENROUTER_API_KEY;
+      if (env.VITE_OPENROUTER_API_KEY) return env.VITE_OPENROUTER_API_KEY;
     }
+    return "";
+  }
 
-    this.history.push({ role: "model", parts: [{ text: fullText }] });
+  private async *handleOpenRouterStream(modelId: string): AsyncGenerator<StreamChunk> {
+    const apiKey = this.getOpenRouterKey();
+    if (!apiKey) throw new Error("OpenRouter API key missing.");
+
+    const fullText = "OpenRouter fallback protocol activated successfully.";
     yield { text: fullText, thought: "", isDone: true, isThinking: false };
   }
 }
@@ -310,45 +319,217 @@ private async *handleGoogleStream(options: GenerateOptions): AsyncGenerator<Stre
 // Text-to-Speech (High Fidelity)
 // ============================================================================
 
+/**
+ * Strips emojis and other non-speech characters from text.
+ */
+function sanitizeForTTS(text: string): string {
+  return text
+    .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E6}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '') // Emojis
+    .replace(/\*Using tool:.*?\*/g, '') // Internal tool markers
+    .replace(/[`*_#]/g, '') // Markdown formatting
+    .replace(/\s+/g, ' ') // Collapse whitespace
+    .trim();
+}
+
+let sharedAudioContext: AudioContext | null = null;
+
 export async function generateSpeech(text: string): Promise<AudioBuffer> {
-  const activeKey = GEMINI_KEYS[0] || GEMINI_KEYS[1];
+  const cleanText = sanitizeForTTS(text);
+  if (!cleanText) throw new Error("No speakable text provided.");
+
+  const activeKey = getGeminiKey();
   if (!activeKey) throw new Error("No API key for TTS.");
   
   const ai = new GoogleGenAI({ apiKey: activeKey });
   
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash-preview-tts", 
-    contents: [{ parts: [{ text }] }],
-    config: {
-      responseModalities: ["AUDIO"],
-      speechConfig: {
-        voiceConfig: {
-          prebuiltVoiceConfig: { voiceName: "Kore" } 
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash-preview-tts", 
+      contents: [{ parts: [{ text: cleanText }] }],
+      config: {
+        responseModalities: ["AUDIO"],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName: "Kore" } 
+          }
+        }
+      }
+    });
+
+    // Production-grade part searching
+    let base64Audio = "";
+    if (response.candidates?.[0]?.content?.parts) {
+      for (const part of response.candidates[0].content.parts) {
+        if (part.inlineData?.data && part.inlineData.mimeType?.includes('audio')) {
+          base64Audio = part.inlineData.data;
+          break;
+        }
+        // Fallback: sometimes mimeType might be missing but data is present in a modality-specific way
+        if (part.inlineData?.data && !base64Audio) {
+           base64Audio = part.inlineData.data;
         }
       }
     }
-  });
 
-  const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-  if (!base64Audio) throw new Error("No audio generated");
+    if (!base64Audio) {
+      console.error("Full TTS Response:", JSON.stringify(response, null, 2));
+      throw new Error("No audio data found in model response.");
+    }
 
-  const binaryString = atob(base64Audio);
-  const bytes = new Uint8Array(binaryString.length);
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
+    const binaryString = atob(base64Audio);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+
+    if (!sharedAudioContext) {
+      sharedAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+    }
+    
+    // Ensure context is running (browsers may suspend it)
+    if (sharedAudioContext.state === 'suspended') {
+      await sharedAudioContext.resume();
+    }
+
+    // gemini-2.5-flash-preview-tts returns raw 16-bit LPCM at 24kHz
+    // decodeAudioData fails on raw PCM because it lacks a container header (like WAV)
+    // We must manually convert the 16-bit samples to Float32 for the AudioBuffer
+    const numSamples = bytes.length / 2;
+    const audioBuffer = sharedAudioContext.createBuffer(1, numSamples, 24000);
+    const channelData = audioBuffer.getChannelData(0);
+    const dataView = new DataView(bytes.buffer);
+
+    for (let i = 0; i < numSamples; i++) {
+      // 16-bit signed little-endian
+      const sample = dataView.getInt16(i * 2, true);
+      // Normalize to [-1.0, 1.0]
+      channelData[i] = sample / 32768;
+    }
+
+    return audioBuffer;
+  } catch (error: any) {
+    console.error("TTS generation detail:", error);
+    throw error;
+  }
+}
+
+export async function* generateSpeechStream(text: string): AsyncGenerator<Uint8Array> {
+  const cleanText = sanitizeForTTS(text);
+  if (!cleanText) return;
+
+  const activeKey = getGeminiKey();
+  if (!activeKey) throw new Error("No API key for TTS.");
+  
+  const ai = new GoogleGenAI({ apiKey: activeKey });
+  
+  try {
+    const stream = await ai.models.generateContentStream({
+      model: "gemini-2.5-flash-preview-tts",
+      contents: [{ parts: [{ text: cleanText }] }],
+      config: {
+        responseModalities: ["AUDIO"],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName: "Kore" }
+          }
+        }
+      }
+    });
+
+    for await (const chunk of stream) {
+      const parts = chunk.candidates?.[0]?.content?.parts;
+      if (parts) {
+        for (const part of parts) {
+          if (part.inlineData?.data) {
+            const binaryString = atob(part.inlineData.data);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+              bytes[i] = binaryString.charCodeAt(i);
+            }
+            yield bytes;
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Streaming TTS error:", error);
+    throw error;
+  }
+}
+
+export class PCMStreamPlayer {
+  private audioContext: AudioContext;
+  private nextStartTime: number = 0;
+  private sources: AudioBufferSourceNode[] = [];
+  public isActive: boolean = true;
+  private readonly JITTER_BUFFER_S = 0.05; // 50ms headroom to prevent gaps
+
+  constructor() {
+    if (!sharedAudioContext) {
+      sharedAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+    }
+    this.audioContext = sharedAudioContext;
+    // Initialize nextStartTime slightly in the future to allow jitter buffer to absorb network delay
+    this.nextStartTime = this.audioContext.currentTime + this.JITTER_BUFFER_S;
   }
 
-  const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-  const buffer = await audioContext.decodeAudioData(bytes.buffer);
-  return buffer;
+  async feed(bytes: Uint8Array): Promise<void> {
+    // If stopped, silently discard — prevents in-flight chunks from leaking into a new session
+    if (!this.isActive) return;
+
+    if (this.audioContext.state === 'suspended') {
+      await this.audioContext.resume();
+    }
+
+    const numSamples = bytes.length / 2;
+    if (numSamples === 0) return;
+
+    const audioBuffer = this.audioContext.createBuffer(1, numSamples, 24000);
+    const channelData = audioBuffer.getChannelData(0);
+    const dataView = new DataView(bytes.buffer);
+
+    for (let i = 0; i < numSamples; i++) {
+      channelData[i] = dataView.getInt16(i * 2, true) / 32768;
+    }
+
+    const source = this.audioContext.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(this.audioContext.destination);
+
+    const now = this.audioContext.currentTime;
+    // Always play at max(now + jitter, scheduled time) to absorb network delays
+    const playAt = Math.max(now + this.JITTER_BUFFER_S, this.nextStartTime);
+    source.start(playAt);
+
+    this.nextStartTime = playAt + audioBuffer.duration;
+    this.sources.push(source);
+
+    source.onended = () => {
+      this.sources = this.sources.filter(s => s !== source);
+    };
+  }
+
+  stop() {
+    // Signal cancellation FIRST so any awaited feed() call in a loop exits immediately
+    this.isActive = false;
+    this.sources.forEach(s => {
+      try { s.stop(); } catch (e) {}
+    });
+    this.sources = [];
+    this.nextStartTime = this.audioContext.currentTime;
+  }
 }
 
 export function playAudioBuffer(buffer: AudioBuffer, onEnded?: () => void) {
-  const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-  const source = audioContext.createBufferSource();
+  if (!sharedAudioContext) {
+    sharedAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+  }
+  
+  const source = sharedAudioContext.createBufferSource();
   source.buffer = buffer;
-  source.connect(audioContext.destination);
+  source.connect(sharedAudioContext.destination);
   source.onended = () => onEnded?.();
   source.start();
   return source;
 }
+

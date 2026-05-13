@@ -29,7 +29,7 @@
         if (x !== undefined && y !== undefined) {
           const el = document.elementFromPoint(x, y);
           if (el) {
-            (el as HTMLElement).click();
+            el.click();
           } else {
             throw new Error('No element found at coordinates');
           }

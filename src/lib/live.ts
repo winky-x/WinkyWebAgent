@@ -1,6 +1,6 @@
 import { GoogleGenAI, LiveServerMessage, Modality } from "@google/genai";
 import { toolDeclarations, executeTool } from "./tools";
-import { SYSTEM_INSTRUCTION } from "./prompt";
+import { STANDARD_SYSTEM_INSTRUCTION } from "./prompt";
 // 1. Import the shared key logic
 import { getGeminiKey } from "./gemini"; 
 
@@ -11,7 +11,7 @@ export class LiveSession {
   private mediaStream: MediaStream | null = null;
   private scriptProcessor: ScriptProcessorNode | null = null;
   private nextStartTime: number = 0;
-  private isConnected: boolean = false;
+  public isConnected: boolean = false;
   private isMuted: boolean = false;
 
   public onMessage: (msg: { role: string, text: string, isFinal?: boolean, isTranscription?: boolean }) => void = () => {};
@@ -29,7 +29,7 @@ export class LiveSession {
     // 2. Fetch the key dynamically when connecting
     const key = getGeminiKey();
     if (!key) {
-      this.onError(new Error("Please provide a valid API key."));
+      this.onError(new Error("Missing API Key. Please add it to your .env file."));
       return;
     }
 
@@ -39,7 +39,7 @@ export class LiveSession {
     this.nextStartTime = this.audioContext.currentTime;
 
     this.sessionPromise = ai.live.connect({
-      model: "gemini-2.5-flash-native-audio-preview-09-2025",
+      model: "gemini-3.1-flash-live-preview",
       callbacks: {
         onopen: async () => {
           this.isConnected = true;
@@ -62,7 +62,7 @@ export class LiveSession {
         speechConfig: {
           voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } },
         },
-        systemInstruction: SYSTEM_INSTRUCTION,
+        systemInstruction: STANDARD_SYSTEM_INSTRUCTION,
         tools: [{ functionDeclarations: toolDeclarations }],
         outputAudioTranscription: {},
         inputAudioTranscription: {}
