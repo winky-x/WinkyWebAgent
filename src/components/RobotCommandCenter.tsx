@@ -173,8 +173,8 @@ function ConnectionStatusBar({ ip, online, latencyMs, distanceCm, onEmergencySto
   const isOnline = online === true;
 
   return (
-    <div className="flex items-center justify-between px-4 py-2 bg-zinc-950 border-b border-zinc-800 text-xs font-mono">
-      <div className="flex items-center gap-4">
+    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 py-2 bg-zinc-950 border-b border-zinc-800 text-xs font-mono">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-4">
         <div className="flex items-center gap-2">
           {isChecking ? (
             <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
@@ -405,14 +405,14 @@ export function RobotCommandCenter({
       />
 
       {/* Main Grid */}
-      <div className="flex-1 flex overflow-hidden min-h-0">
+      <div className="flex-1 flex flex-col md:flex-row overflow-x-hidden overflow-y-auto md:overflow-hidden min-h-0">
         {/* Left — Video Feed */}
-        <div className="flex-1 p-3 min-w-0">
+        <div className="flex-shrink-0 md:flex-shrink md:flex-1 p-3 min-h-[300px] md:min-h-0 min-w-0">
           <VideoFeedPanel ip={ip} />
         </div>
 
         {/* Right — Cognition Sidebar */}
-        <div className="w-[320px] flex-shrink-0 flex flex-col gap-3 p-3 overflow-y-auto border-l border-zinc-800">
+        <div className="w-full md:w-[320px] flex-shrink-0 flex flex-col gap-3 p-3 overflow-visible md:overflow-y-auto border-t md:border-t-0 md:border-l border-zinc-800">
           {/* Emotion Visualizer */}
           <div className="flex flex-col items-center py-3 bg-zinc-900 rounded-2xl border border-zinc-800">
             <p className="text-[9px] font-black uppercase tracking-widest text-zinc-600 mb-3 flex items-center gap-1">

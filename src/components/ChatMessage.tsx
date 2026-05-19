@@ -21,7 +21,7 @@ import {
   Cpu
 } from 'lucide-react';
 import clsx from 'clsx';
-import { Message } from '@/lib/gemini';
+import { Message, Attachment } from '@/lib/gemini';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 
@@ -168,6 +168,36 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
               {message.text || (message.isThinking && !message.thought ? "Generating neural outputs..." : "")}
             </Markdown>
           </div>
+
+          {/* Render Attachments if present */}
+          {message.attachments && message.attachments.length > 0 && (
+            <div className="flex flex-wrap gap-3 mt-4 relative z-10">
+              {message.attachments.map((att, idx) => {
+                const src = att.url || `data:${att.mimeType};base64,${att.data}`;
+                return (
+                  <div key={idx} className="relative rounded-2xl overflow-hidden border border-zinc-200/20 bg-zinc-950/40 p-1.5 max-w-[260px] shadow-md transition-all duration-300 hover:scale-[1.02]">
+                    {att.mimeType.startsWith('image/') ? (
+                      <img 
+                        src={src} 
+                        alt="Attachment" 
+                        className="max-h-48 object-contain rounded-xl"
+                      />
+                    ) : att.mimeType.startsWith('video/') ? (
+                      <video 
+                        src={src} 
+                        controls 
+                        className="max-h-48 rounded-xl"
+                      />
+                    ) : (
+                      <div className="h-16 px-4 flex items-center gap-2 bg-zinc-800 rounded-xl text-zinc-300 text-xs">
+                        <span>File Attachment ({att.mimeType})</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* --- GROUNDING SOURCES (Web Search UI) --- */}
           {isAssistant && message.groundingChunks && message.groundingChunks.length > 0 && (

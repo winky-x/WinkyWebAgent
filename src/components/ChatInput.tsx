@@ -145,7 +145,7 @@ export function ChatInput({ onSend, disabled, voiceMode, value, onChange, isMute
   };
 
   return (
-    <div className="relative w-full max-w-4xl mx-auto px-4 pb-4">
+    <div className="relative w-full max-w-4xl mx-auto px-1 sm:px-4 pb-1 sm:pb-4">
       {/* TOOL POPUP OVERLAY */}
       <AnimatePresence>
         {!voiceMode && showTools && (
@@ -153,7 +153,7 @@ export function ChatInput({ onSend, disabled, voiceMode, value, onChange, isMute
             initial={{ opacity: 0, y: 10, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.95 }}
-            className="absolute bottom-[calc(100%+16px)] left-4 w-72 bg-white/95 backdrop-blur-2xl rounded-3xl shadow-2xl border border-zinc-200/80 overflow-hidden z-50 p-2"
+            className="absolute bottom-[calc(100%+16px)] left-2 sm:left-4 w-[calc(100vw-16px)] sm:w-72 max-w-[288px] bg-white/95 backdrop-blur-2xl rounded-3xl shadow-2xl border border-zinc-200/80 overflow-hidden z-50 p-2"
           >
             <div className="px-3 py-2 text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] border-b border-zinc-100 mb-1 flex items-center gap-2">
               <Activity size={12} className="text-violet-500" /> Cognitive Directives
@@ -225,19 +225,19 @@ export function ChatInput({ onSend, disabled, voiceMode, value, onChange, isMute
 
       {/* MAIN INPUT CONTAINER */}
       <div className={clsx(
-        "flex flex-col gap-2 p-2 rounded-[2.5rem] transition-all duration-500 relative",
+        "flex flex-col gap-1 sm:gap-2 p-1 sm:p-2 rounded-[2rem] sm:rounded-[2.5rem] transition-all duration-500 relative",
         "bg-white/70 backdrop-blur-3xl shadow-2xl shadow-zinc-200/50",
         "border border-white/20 ring-1 ring-zinc-200/50",
         "before:absolute before:inset-0 before:rounded-[2.5rem] before:p-[1.5px] before:bg-gradient-to-tr before:from-transparent before:via-white/40 before:to-transparent before:-z-10 before:mask-composite",
         disabled ? "opacity-60 grayscale shadow-none" : "hover:border-violet-300/50 focus-within:ring-4 focus-within:ring-violet-500/10 focus-within:border-violet-400/50 shadow-[inset_0_1px_2px_rgba(255,255,255,0.8),0_20px_40px_-20px_rgba(0,0,0,0.1)]"
       )}>
-        <div className="flex items-end gap-2 pr-2">
+        <div className="flex items-end gap-1 sm:gap-2 pr-1 sm:pr-2">
           {/* LEFT ACTIONS */}
-          <div className="flex items-center gap-1 pl-2 mb-1">
+          <div className="flex items-center gap-1 pl-1 sm:pl-2 mb-1">
             <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" multiple accept="image/*,video/*,audio/*" />
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="p-3 text-zinc-400 hover:text-violet-600 hover:bg-violet-50 rounded-full transition-all active:scale-90"
+              className="p-2 sm:p-3 text-zinc-400 hover:text-violet-600 hover:bg-violet-50 rounded-full transition-all active:scale-90"
               disabled={disabled}
             >
               <Paperclip size={20} />
@@ -247,7 +247,7 @@ export function ChatInput({ onSend, disabled, voiceMode, value, onChange, isMute
               <button
                 onClick={() => setShowTools(!showTools)}
                 className={clsx(
-                  "p-3 rounded-full transition-all active:scale-90",
+                  "p-2 sm:p-3 rounded-full transition-all active:scale-90",
                   selectedTool ? "text-violet-600 bg-violet-100 shadow-inner" : "text-zinc-400 hover:text-violet-600 hover:bg-violet-50"
                 )}
                 disabled={disabled}
@@ -258,26 +258,26 @@ export function ChatInput({ onSend, disabled, voiceMode, value, onChange, isMute
           </div>
 
           {/* TEXT AREA */}
-          <div className="flex-1 min-h-[52px] flex items-center py-1">
+          <div className="flex-1 min-w-0 min-h-[44px] sm:min-h-[52px] flex items-center py-1">
             <textarea
               ref={textareaRef}
               value={value}
               onChange={(e) => onChange(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={voiceMode ? "Neural transmission active..." : "Ask Winky anything..."}
-              className="w-full max-h-40 min-h-[44px] px-2 py-3 bg-transparent resize-none focus:outline-none text-zinc-800 placeholder:text-zinc-400 font-medium leading-relaxed text-[16px] selection:bg-violet-100"
+              placeholder={voiceMode ? "Neural transmission..." : "Ask Winky..."}
+              className="w-full max-h-40 min-h-[38px] sm:min-h-[44px] px-1 sm:px-2 py-1.5 sm:py-3 bg-transparent resize-none focus:outline-none text-zinc-800 placeholder:text-zinc-400 font-medium leading-normal text-[15px] sm:text-[16px] selection:bg-violet-100"
               rows={1}
               disabled={disabled}
             />
           </div>
 
           {/* RIGHT ACTIONS */}
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-1 sm:gap-2 mb-1">
             {voiceMode ? (
               <button
                 onClick={() => onMuteChange(!isMuted)}
                 className={clsx(
-                  "p-3 rounded-full transition-all duration-500 shadow-md",
+                  "p-2 sm:p-3 rounded-full transition-all duration-500 shadow-md",
                   isMuted ? "bg-rose-100 text-rose-600 hover:bg-rose-200" : "bg-emerald-100 text-emerald-600 hover:bg-emerald-200 ring-4 ring-emerald-50 animate-pulse"
                 )}
                 disabled={disabled}
@@ -288,7 +288,7 @@ export function ChatInput({ onSend, disabled, voiceMode, value, onChange, isMute
               <button
                 onClick={isRecording ? stopRecording : startRecording}
                 className={clsx(
-                  "p-3 rounded-full transition-all duration-300",
+                  "p-2 sm:p-3 rounded-full transition-all duration-300",
                   isRecording ? "bg-rose-500 text-white animate-pulse shadow-rose-200 shadow-lg" : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-900"
                 )}
                 disabled={disabled}
@@ -301,7 +301,7 @@ export function ChatInput({ onSend, disabled, voiceMode, value, onChange, isMute
               onClick={handleSend}
               disabled={disabled || (!value.trim() && attachments.length === 0)}
               className={clsx(
-                "w-12 h-12 flex items-center justify-center rounded-full transition-all duration-300 shadow-lg disabled:opacity-30 disabled:scale-95 disabled:shadow-none",
+                "w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-full transition-all duration-300 shadow-lg disabled:opacity-30 disabled:scale-95 disabled:shadow-none",
                 "bg-gradient-to-tr from-violet-600 via-indigo-600 to-purple-600 text-white hover:shadow-violet-200 hover:scale-105 active:scale-95"
               )}
             >

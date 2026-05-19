@@ -21,7 +21,7 @@ To safely execute this wireless architecture, the following components are requi
 
 ### **Processing & Vision**
 * **ESP32-CAM Module (OV2640 Lens)** — *Owned* (Main controller, hosts the web server and handles logic).
-* **FTDI Programmer (USB to TTL)** — *Required* (Used to flash firmware to the ESP32-CAM).
+* **ESP32-CAM-MB** — *Required* (Used to flash firmware to the ESP32-CAM).
 
 ### **Drive System (Kinematics)**
 * **L298N Motor Driver Module** — *Owned* (H-Bridge driver for motor speed and direction control).

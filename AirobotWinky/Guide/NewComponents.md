@@ -8,6 +8,8 @@ This document details the hardware components integrated into the Winky AI Robot
 ### **ESP32-CAM (AI-Thinker Module)**
 *   **Role:** Main Controller & Vision Streamer.
 
+### **ESP32-CAM-MB** — *Required* (Used to flash firmware to the ESP32-CAM).
+
 ## 2. Power Management System
 ### **LM2596 DC-DC Buck Converter**
 *   **Role:** High-Efficiency Voltage Regulator.

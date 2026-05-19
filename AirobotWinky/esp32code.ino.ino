@@ -16,19 +16,19 @@ const char* password = "YOUR_WIFI_PASSWORD";
 
 // --- PIN MAPPING ---
 // Motors (L298N)
-#define MOTOR_R_IN1 14  // Right Forward
-#define MOTOR_R_IN2 15  // Right Backward
-#define MOTOR_L_IN1 13  // Left Forward
-#define MOTOR_L_IN2 12  // Left Backward
+#define MOTOR_R_IN1 14  // Right Forward (IN1)
+#define MOTOR_R_IN2 15  // Right Backward (IN2)
+#define MOTOR_L_IN3 13  // Left Forward (IN3)
+#define MOTOR_L_IN4 12  // Left Backward (IN4)
 
 // Ultrasonic (HC-SR04)
 #define TRIG_PIN 2
 #define ECHO_PIN 16
 
-// LCD (I2C) - Using Software I2C on free pins if possible
-// Note: ESP32-CAM pins are limited. Adjust these based on your wiring.
-#define I2C_SDA 4   // Often shared with Flash LED
-#define I2C_SCL 33  // Internal LED pin
+// LCD (I2C)
+// SDA on GPIO 4 (Flash LED) | SCL on GPIO 1 (TX Pin)
+#define I2C_SDA 4
+#define I2C_SCL 1
 
 // PWM Channels
 #define CH_RF 0
@@ -98,8 +98,9 @@ void driveMotors(int rf, int rb, int lf, int lb) {
 esp_err_t status_handler(httpd_req_t *req) {
   httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
   currentDistance = getDistance();
-  char json[128];
-  snprintf(json, sizeof(json), "{\"online\":true, \"distance_cm\":%.1f, \"emotion\":\"%s\"}", currentDistance, currentEmotion.c_str());
+  char json[256]; // Increased for safety
+  snprintf(json, sizeof(json), "{\"online\":true, \"distance_cm\":%.1f, \"emotion\":\"%s\", \"last_spoken\":\"%s\"}", 
+           currentDistance, currentEmotion.c_str(), lastSpoken.c_str());
   httpd_resp_set_type(req, "application/json");
   return httpd_resp_send(req, json, -1);
 }
@@ -129,15 +130,28 @@ esp_err_t stream_handler(httpd_req_t *req) {
 
 esp_err_t api_handler(httpd_req_t *req) {
   httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
-  char buf[128];
+  char buf[256]; 
   int speed = 180;
   int duration = 500;
+  bool updateDisplay = false;
   
   if (httpd_req_get_url_query_str(req, buf, sizeof(buf)) == ESP_OK) {
-    char val[16];
+    char val[64];
     if (httpd_query_key_value(buf, "speed", val, sizeof(val)) == ESP_OK) speed = atoi(val);
     if (httpd_query_key_value(buf, "duration_ms", val, sizeof(val)) == ESP_OK) duration = atoi(val);
+    
+    // Support updating LCD state via API
+    if (httpd_query_key_value(buf, "emotion", val, sizeof(val)) == ESP_OK) {
+      currentEmotion = String(val);
+      updateDisplay = true;
+    }
+    if (httpd_query_key_value(buf, "say", val, sizeof(val)) == ESP_OK) {
+      lastSpoken = String(val);
+      updateDisplay = true;
+    }
   }
+
+  if (updateDisplay) updateLCD();
 
   const char* uri = req->uri;
   if (strstr(uri, "/forward")) driveMotors(speed, 0, speed, 0);
@@ -158,17 +172,20 @@ esp_err_t api_handler(httpd_req_t *req) {
 // --- SETUP & LOOP ---
 
 void setup() {
-  Serial.begin(115200);
+  // NOTE: Serial uses GPIO 1 (TX). Since LCD SCL is also on GPIO 1, 
+  // Serial prints may flicker the LCD or cause I2C errors.
+  Serial.begin(115200); 
+  
   Wire.begin(I2C_SDA, I2C_SCL);
   lcd.init();
   lcd.backlight();
-  lcd.print("Winky Booting...");
+  updateLCD(); // Show initial state
 
   // Motor PWM Setup
   ledcSetup(CH_RF, PWM_FREQ, PWM_RES); ledcAttachPin(MOTOR_R_IN1, CH_RF);
   ledcSetup(CH_RB, PWM_FREQ, PWM_RES); ledcAttachPin(MOTOR_R_IN2, CH_RB);
-  ledcSetup(CH_LF, PWM_FREQ, PWM_RES); ledcAttachPin(MOTOR_L_IN1, CH_LF);
-  ledcSetup(CH_LB, PWM_FREQ, PWM_RES); ledcAttachPin(MOTOR_L_IN2, CH_LB);
+  ledcSetup(CH_LF, PWM_FREQ, PWM_RES); ledcAttachPin(MOTOR_L_IN3, CH_LF);
+  ledcSetup(CH_LB, PWM_FREQ, PWM_RES); ledcAttachPin(MOTOR_L_IN4, CH_LB);
   driveMotors(0, 0, 0, 0);
 
   pinMode(TRIG_PIN, OUTPUT);
@@ -191,11 +208,21 @@ void setup() {
   config.frame_size = FRAMESIZE_QVGA;
   config.jpeg_quality = 12;
   config.fb_count = 1;
+  config.fb_location = CAMERA_FB_IN_PSRAM;
 
-  esp_camera_init(&config);
+  esp_err_t err = esp_camera_init(&config);
+  if (err != ESP_OK) {
+    lcd.clear();
+    lcd.print("Cam Init Fail");
+    return;
+  }
   
   WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) { delay(500); Serial.print("."); }
+  while (WiFi.status() != WL_CONNECTED) { 
+    delay(500); 
+    // Minimal serial usage to avoid LCD interference
+    if (Serial) Serial.print("."); 
+  }
   
   httpd_config_t server_config = HTTPD_DEFAULT_CONFIG();
   server_config.server_port = 80;

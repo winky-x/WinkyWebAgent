@@ -2,7 +2,7 @@ import { GoogleGenAI, LiveServerMessage, Modality } from "@google/genai";
 import { toolDeclarations, executeTool } from "./tools";
 import { STANDARD_SYSTEM_INSTRUCTION } from "./prompt";
 // 1. Import the shared key logic
-import { getGeminiKey } from "./gemini"; 
+import { getGeminiKey, Attachment } from "./gemini";
 
 export class LiveSession {
   private sessionPromise: Promise<any> | null = null;
@@ -13,10 +13,14 @@ export class LiveSession {
   private nextStartTime: number = 0;
   public isConnected: boolean = false;
   private isMuted: boolean = false;
+  private activeSources: AudioBufferSourceNode[] = [];
+  private textResponseActive: boolean = false;
+  private textResponseTimeout: any = null;
+  private ignoreAckUntil: number = 0;
 
-  public onMessage: (msg: { role: string, text: string, isFinal?: boolean, isTranscription?: boolean }) => void = () => {};
-  public onInterrupted: () => void = () => {};
-  public onError: (error: any) => void = () => {};
+  public onMessage: (msg: { role: string, text: string, isFinal?: boolean, isTranscription?: boolean }) => void = () => { };
+  public onInterrupted: () => void = () => { };
+  public onError: (error: any) => void = () => { };
   public onRawMessage?: (msg: any) => void;
 
   setMuted(muted: boolean) {
@@ -25,7 +29,7 @@ export class LiveSession {
 
   async connect() {
     if (this.isConnected) return;
-    
+
     // 2. Fetch the key dynamically when connecting
     const key = getGeminiKey();
     if (!key) {
@@ -34,7 +38,7 @@ export class LiveSession {
     }
 
     const ai = new GoogleGenAI({ apiKey: key });
-    
+
     this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
     this.nextStartTime = this.audioContext.currentTime;
 
@@ -81,6 +85,8 @@ export class LiveSession {
 
       this.scriptProcessor.onaudioprocess = (e) => {
         if (!this.isConnected || !this.sessionPromise || this.isMuted) return;
+        if (this.textResponseActive) return;
+
         const inputData = e.inputBuffer.getChannelData(0);
         const pcmData = new Int16Array(inputData.length);
         for (let i = 0; i < inputData.length; i++) {
@@ -111,9 +117,13 @@ export class LiveSession {
       this.onRawMessage(message);
     }
 
+    const isAckWindow = Date.now() < this.ignoreAckUntil;
+
     if (message.serverContent?.interrupted) {
+      if (isAckWindow) return; // Ignore abort ack
+      
       this.onInterrupted();
-      this.nextStartTime = this.audioContext?.currentTime || 0;
+      this.stopAudio();
     }
 
     const parts = message.serverContent?.modelTurn?.parts;
@@ -124,8 +134,8 @@ export class LiveSession {
         }
         if (part.text) {
           // FIX: Filter out internal monologue and default greeting headers
-          const isInternalThought = 
-            part.text.includes("Addressing the") || 
+          const isInternalThought =
+            part.text.includes("Addressing the") ||
             part.text.includes("Initiating a Dialogue") ||
             part.text.includes("Okay, so the user") ||
             part.text.includes("I'll correct them with Hinglish");
@@ -138,6 +148,9 @@ export class LiveSession {
     }
 
     if (message.serverContent?.turnComplete) {
+      if (isAckWindow) return; // Ignore abort ack
+
+      this.textResponseActive = false;
       this.onMessage({ role: 'assistant', text: '', isFinal: true });
     }
 
@@ -147,6 +160,9 @@ export class LiveSession {
       if (text) {
         this.onMessage({ role: 'assistant', text, isFinal, isTranscription: true });
       } else if (isFinal) {
+        if (isAckWindow) return; // Ignore abort ack
+        
+        this.textResponseActive = false;
         this.onMessage({ role: 'assistant', text: '', isFinal: true, isTranscription: true });
       }
     }
@@ -172,7 +188,7 @@ export class LiveSession {
           response: result
         });
       }
-      
+
       if (this.sessionPromise && functionResponses.length > 0) {
         this.sessionPromise.then(session => {
           session.sendToolResponse({ functionResponses });
@@ -189,30 +205,69 @@ export class LiveSession {
       bytes[i] = binary.charCodeAt(i);
     }
     const pcmData = new Int16Array(bytes.buffer);
-    
+
     const buffer = this.audioContext.createBuffer(1, pcmData.length, 24000);
     const channelData = buffer.getChannelData(0);
     for (let i = 0; i < pcmData.length; i++) {
       channelData[i] = pcmData[i] / 32768.0;
     }
-    
+
     const source = this.audioContext.createBufferSource();
     source.buffer = buffer;
     source.connect(this.audioContext.destination);
     const startTime = Math.max(this.nextStartTime, this.audioContext.currentTime);
     source.start(startTime);
     this.nextStartTime = startTime + buffer.duration;
+
+    this.activeSources.push(source);
+    source.onended = () => {
+      this.activeSources = this.activeSources.filter(s => s !== source);
+    };
   }
 
-async sendText(text: string) {
+  public stopAudio() {
+    this.activeSources.forEach(source => {
+      try {
+        source.stop();
+      } catch (err) {
+        // Ignore errors from stopping a source that hasn't started or already stopped
+      }
+    });
+    this.activeSources = [];
+    this.nextStartTime = this.audioContext?.currentTime || 0;
+  }
+
+  async sendText(text: string, attachments: Attachment[] = []) {
     if (!this.sessionPromise || !this.isConnected) return;
+    
+    this.stopAudio();
+    // Completely pause mic during text response generation and ignore incoming abort acks for 1.2s
+    this.textResponseActive = true;
+    this.ignoreAckUntil = Date.now() + 1200;
+    
+    if (this.textResponseTimeout) clearTimeout(this.textResponseTimeout);
+    this.textResponseTimeout = setTimeout(() => { this.textResponseActive = false; }, 15000);
     
     try {
       const session = await this.sessionPromise;
-      
+
+      const parts: any[] = [];
+      if (text) {
+        parts.push({ text });
+      }
+
+      for (const att of attachments) {
+        parts.push({
+          inlineData: {
+            mimeType: att.mimeType,
+            data: att.data
+          }
+        });
+      }
+
       const payload = {
         clientContent: {
-          turns: [{ role: 'user', parts: [{ text }] }],
+          turns: [{ role: 'user', parts }],
           turnComplete: true
         }
       };
@@ -235,6 +290,7 @@ async sendText(text: string) {
 
   disconnect() {
     this.isConnected = false;
+    this.stopAudio();
     if (this.scriptProcessor) {
       this.scriptProcessor.disconnect();
       this.scriptProcessor = null;

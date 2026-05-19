@@ -315,6 +315,9 @@ export default function App() {
       pcmPlayerRef.current.stop(); // sets isActive=false, kills all scheduled sources
       pcmPlayerRef.current = null; // dereference so next request creates a fresh player
     }
+    if (liveSessionRef.current) {
+      liveSessionRef.current.stopAudio();
+    }
     setIsSpeaking(false);
   };
 
@@ -383,9 +386,9 @@ export default function App() {
 
     // Direct Voice relay if standard view is configured and session is active
     if (activeView === 'chat' && voiceMode && liveSessionRef.current && liveSessionRef.current.isConnected) {
-      if (safeText.trim() && !isSystemTrigger) {
+      if ((safeText.trim() || safeAttachments.length > 0) && !isSystemTrigger) {
         setMessages(prev => prev.map(m => m.role === 'user' ? { ...m, status: 'read' as const } : m));
-        liveSessionRef.current.sendText(safeText);
+        liveSessionRef.current.sendText(safeText, safeAttachments);
         return;
       }
     }
@@ -581,32 +584,33 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen bg-zinc-50 font-sans">
-      <header className="flex items-center justify-between px-6 py-4 bg-white/70 backdrop-blur-xl border-b border-zinc-200/50 sticky top-0 z-50">
-        <div className="flex items-center gap-3">
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden shadow-sm transition-all duration-500 ${isSpeaking ? 'bg-emerald-500 ring-4 ring-emerald-50' : 'bg-none'}`}>
-            <img
-              src="/logo.png"
-              alt="Winky Logo"
-              className={`w-6 h-6 object-contain transition-transform duration-500 ${isSpeaking ? 'scale-110' : 'hover:scale-110'}`}
-            />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-zinc-900 tracking-tight font-display">Winky AI</h1>
-            <p className="text-xs text-zinc-500 flex items-center gap-1 font-medium">
-              <Sparkles className="w-3 h-3 text-violet-500" />
-              {activeView === 'robot' ? 'IoT Platform Mode' : voiceMode ? 'Voice Mode Active' : 'Thinking Mode Active'}
-            </p>
-          </div>
+      <header className="flex flex-row items-center justify-between px-2 sm:px-6 py-2 sm:py-4 bg-white/70 backdrop-blur-xl border-b border-zinc-200/50 sticky top-0 z-50">
+        <div className="flex items-center gap-2 sm:gap-3">
+            <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center overflow-hidden shadow-sm transition-all duration-500 ${isSpeaking ? 'bg-emerald-500 ring-4 ring-emerald-50' : 'bg-none'}`}>
+              <img
+                src="/logo.png"
+                alt="Winky Logo"
+                className={`w-5 h-5 sm:w-6 sm:h-6 object-contain transition-transform duration-500 ${isSpeaking ? 'scale-110' : 'hover:scale-110'}`}
+              />
+            </div>
+            <div>
+              <h1 className="text-base sm:text-xl font-bold text-zinc-900 tracking-tight font-display">Winky AI</h1>
+              <p className="hidden sm:flex text-xs text-zinc-500 items-center gap-1 font-medium">
+                <Sparkles className="w-3 h-3 text-violet-500" />
+                {activeView === 'robot' ? 'IoT Platform Mode' : voiceMode ? 'Voice Mode Active' : 'Thinking Mode'}
+              </p>
+            </div>
         </div>
 
         {/* Global Nav Elements */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1 sm:gap-3">
           <button
             onClick={() => { setActiveView('robot'); setImgError(false); }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all duration-300 ${activeView === 'robot' ? 'bg-violet-600 text-white shadow-md shadow-violet-100' : 'bg-violet-50 text-violet-600 hover:bg-violet-100/80 border border-violet-100/50'}`}
+            className={`flex items-center gap-1 sm:gap-2 px-1.5 py-1 sm:px-4 sm:py-2 rounded-xl text-sm font-bold transition-all duration-300 ${activeView === 'robot' ? 'bg-violet-600 text-white shadow-md shadow-violet-100' : 'bg-violet-50 text-violet-600 hover:bg-violet-100/80 border border-violet-100/50'}`}
           >
-            <Radio className={`w-4 h-4 ${activeView === 'robot' ? 'animate-pulse' : ''}`} />
-            Initialize Winky Physical Agent
+            <Radio className={`w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0 ${activeView === 'robot' ? 'animate-pulse' : ''}`} />
+            <span className="hidden sm:inline">Initialize Winky Physical Agent</span>
+            <span className="inline sm:hidden text-[10px]">WinkyRobot</span>
           </button>
 
           {activeView === 'robot' && (
@@ -629,20 +633,20 @@ export default function App() {
           )}
 
           {activeView === 'chat' && (
-            <div className="flex items-center bg-zinc-100/80 p-1 rounded-xl border border-zinc-200/50 backdrop-blur-sm">
+            <div className="flex items-center bg-zinc-100/80 p-0.5 sm:p-1 rounded-xl border border-zinc-200/50 backdrop-blur-sm">
               <button
                 onClick={() => { setVoiceMode(true); stopSpeaking(); }}
-                className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold transition-all duration-300 ${voiceMode ? 'bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/50' : 'text-zinc-500 hover:text-zinc-700'}`}
+                className={`flex items-center gap-1 sm:gap-2 px-1.5 py-1 sm:px-4 sm:py-1.5 rounded-lg text-[10px] sm:text-sm font-semibold transition-all duration-300 ${voiceMode ? 'bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/50' : 'text-zinc-500 hover:text-zinc-700'}`}
               >
-                <Volume2 className="w-4 h-4" />
-                Voice
+                <Volume2 className="w-3 h-3 sm:w-4 sm:h-4" />
+                <span className="inline">Voice</span>
               </button>
               <button
                 onClick={() => { setVoiceMode(false); stopSpeaking(); }}
-                className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold transition-all duration-300 ${!voiceMode ? 'bg-white text-violet-600 shadow-sm ring-1 ring-zinc-200/50' : 'text-zinc-500 hover:text-zinc-700'}`}
+                className={`flex items-center gap-1 sm:gap-2 px-1.5 py-1 sm:px-4 sm:py-1.5 rounded-lg text-[10px] sm:text-sm font-semibold transition-all duration-300 ${!voiceMode ? 'bg-white text-violet-600 shadow-sm ring-1 ring-zinc-200/50' : 'text-zinc-500 hover:text-zinc-700'}`}
               >
-                <BrainCircuit className="w-4 h-4" />
-                Think
+                <BrainCircuit className="w-3 h-3 sm:w-4 sm:h-4" />
+                <span className="inline">Think</span>
               </button>
             </div>
           )}
@@ -678,34 +682,34 @@ export default function App() {
       ) : (
         /* Legacy Standard View Presentation */
         <>
-          <main className="flex-1 overflow-y-auto pb-32">
+          <main className="flex-1 overflow-y-auto pb-20 sm:pb-32">
             {messages.length === 0 ? (
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, ease: "easeOut" }}
-                className="flex flex-col items-center justify-center min-h-full text-center px-4 py-12"
+                className="flex flex-col items-center justify-center min-h-full text-center px-4 py-4 sm:py-12"
               >
-                <div className={`w-22 h-22 rounded-3xl flex items-center justify-center mb-8 transition-all duration-300 shadow-sm ${voiceMode
+                <div className={`w-16 h-16 sm:w-24 sm:h-24 rounded-3xl flex items-center justify-center mb-4 sm:mb-8 transition-all duration-300 shadow-sm ${voiceMode
                   ? 'bg-transparent text-black'
                   : (Date.now() % 2 === 0)
                     ? 'bg-black border border-zinc-800 text-white'
                     : 'bg-violet-50 border border-violet-100 text-violet-600'
                   }`}>
                   {voiceMode ? (
-                    <AudioLines className="w-14 h-14 animate-pulse" />
+                    <AudioLines className="w-8 h-8 sm:w-14 sm:h-14 animate-pulse" />
                   ) : (
                     (Date.now() % 2 === 0) ? (
-                      <Globe className="w-10 h-10 animate-spin-slow" />
+                      <Globe className="w-8 h-8 sm:w-10 sm:h-10 animate-spin-slow" />
                     ) : (
-                      <SquareDashedMousePointer className="w-10 h-10 animate-spin-slow" />
+                      <SquareDashedMousePointer className="w-8 h-8 sm:w-10 sm:h-10 animate-spin-slow" />
                     )
                   )}
                 </div>
-                <h2 className="text-4xl font-bold text-zinc-900 mb-4 font-display tracking-tight">
+                <h2 className="text-2xl sm:text-4xl font-bold text-zinc-900 mb-2 sm:mb-4 font-display tracking-tight">
                   {voiceMode ? "Let's Talk!" : "How can I help today?"}
                 </h2>
-                <p className="text-zinc-500 max-w-md mb-12 text-lg">
+                <p className="text-zinc-500 max-w-md mb-6 sm:mb-12 text-sm sm:text-lg">
                   {voiceMode
                     ? "I'll respond quickly and speak my answers out loud. Perfect for conversation!"
                     : "I'll take my time to reason through complex problems using advanced tools."}
@@ -742,18 +746,18 @@ export default function App() {
                       <div
                         key={idx}
                         onMouseEnter={() => setHoveredCard(idx)}
-                        className={`p-6 bg-white rounded-3xl border border-zinc-200/80 shadow-sm text-left transition-all duration-500 overflow-hidden relative
+                        className={`p-4 sm:p-6 bg-white rounded-3xl border border-zinc-200/80 shadow-sm text-left transition-all duration-500 overflow-hidden relative
                             ${isHovered ? 'shadow-xl scale-[1.02] border-violet-200 ring-4 ring-violet-50 z-10' : ''}
                             ${isOthersHovered ? 'opacity-50 scale-[0.98]' : ''}
                           `}
                       >
-                        <div className="flex items-center gap-3 mb-3">
-                          <div className="p-2 bg-zinc-50 rounded-xl border border-zinc-100">
+                        <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
+                          <div className="p-1.5 sm:p-2 bg-zinc-50 rounded-xl border border-zinc-100">
                             {feature.icon}
                           </div>
-                          <h3 className="text-lg font-bold text-zinc-900 font-display">{feature.title}</h3>
+                          <h3 className="text-base sm:text-lg font-bold text-zinc-900 font-display">{feature.title}</h3>
                         </div>
-                        <p className={`text-zinc-500 text-sm transition-all duration-300 ${isHovered ? 'opacity-0 h-0' : 'opacity-100 h-auto'}`}>
+                        <p className={`text-zinc-500 text-xs sm:text-sm transition-all duration-300 ${isHovered ? 'opacity-0 h-0' : 'opacity-100 h-auto'}`}>
                           {feature.desc}
                         </p>
 
@@ -766,7 +770,7 @@ export default function App() {
                                 e.stopPropagation();
                                 typeTextToInput(detail.prompt);
                               }}
-                              className="flex items-center justify-between text-sm text-zinc-700 font-medium bg-zinc-50 hover:bg-violet-50 hover:text-violet-700 p-3 rounded-xl transition-colors text-left w-full group border border-transparent hover:border-violet-100"
+                              className="flex items-center justify-between text-xs sm:text-sm text-zinc-700 font-medium bg-zinc-50 hover:bg-violet-50 hover:text-violet-700 p-2 sm:p-3 rounded-xl transition-colors text-left w-full group border border-transparent hover:border-violet-100"
                             >
                               <span>{detail.label}</span>
                               <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -788,7 +792,7 @@ export default function App() {
             )}
           </main>
 
-          <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-zinc-50 via-zinc-50 to-transparent pointer-events-none z-40">
+          <div className="fixed bottom-0 left-0 right-0 p-2 sm:p-4 bg-gradient-to-t from-zinc-50 via-zinc-50 to-transparent pointer-events-none z-40">
             <div className="max-w-3xl mx-auto w-full pointer-events-auto">
               <ChatInput
                 onSend={handleSend}
