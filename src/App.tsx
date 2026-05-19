@@ -611,6 +611,7 @@ export default function App() {
             <Radio className={`w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0 ${activeView === 'robot' ? 'animate-pulse' : ''}`} />
             <span className="hidden sm:inline">Initialize Winky Physical Agent</span>
             <span className="inline sm:hidden text-[10px]">WinkyRobot</span>
+            
           </button>
 
           {activeView === 'robot' && (
