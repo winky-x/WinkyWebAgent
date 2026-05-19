@@ -3,39 +3,32 @@
  * Controller: ESP32-CAM (AI-Thinker)
  * Sensors & Actuators:
  *   - Sonar: HC-SR04 (Top-Facing to detect vehicle chassis)
- *     Trigger Pin -> GPIO 12
- *     Echo Pin    -> GPIO 14 (CRITICAL: Moved from 16 to save the PSRAM)
+ *     Trigger Pin -> GPIO 2 (Built-in LED will blink)
+ *     Echo Pin    -> GPIO 3 (RX Pin. Note: disconnect this wire to upload!)
  *   - Motors: L298N Driver
- *     IN1, IN2 -> GPIO 13, 15 (Right Motor control)
- *     IN3, IN4 -> GPIO 2, 3 (Left Motor control. Note: disconnect RX wire when uploading!)
+ *     IN1, IN2 -> GPIO 14, 15 (Right Motor control)
+ *     IN3, IN4 -> GPIO 13, 12 (Left Motor control)
  *   - Camera & Flash: Built-in OV2640 + GPIO 4 (Flash LED)
- *   - Screen: 16x2 LCD with I2C
- *     SDA -> GPIO 4 | SCL -> GPIO 1 (TX Pin)
  *   - Switch: Built-in GPIO 0 (Flash Button / Start Trigger)
+ * Note: LCD removed to free up pins for full drive and sensors.
  */
 
 #include "esp_camera.h"
 #include <WiFi.h>
 #include <HTTPClient.h>
-#include <Wire.h>
-#include <LiquidCrystal_I2C.h>
 #include <ArduinoJson.h>
 
 // --- PIN ASSIGNMENTS ---
-#define SONAR_TRIG_PIN 12
-#define SONAR_ECHO_PIN 14
+#define SONAR_TRIG_PIN 2
+#define SONAR_ECHO_PIN 3  // RX Pin (Disconnect for upload!)
 
-#define MOTOR_IN1 13  // Right Motor Forward
-#define MOTOR_IN2 15  // Right Motor Backward
-#define MOTOR_IN3 2   // Left Motor Forward
-#define MOTOR_IN4 3   // Left Motor Backward (RX Pin)
+#define MOTOR_IN1 14  // Right Forward (IN1)
+#define MOTOR_IN2 15  // Right Backward (IN2)
+#define MOTOR_IN3 13  // Left Forward (IN3)
+#define MOTOR_IN4 12  // Left Backward (IN4)
 
 #define FLASH_LED_PIN 4
 #define START_BUTTON_PIN 0
-
-// LCD (I2C) - SDA on GPIO 4 (Flash LED) | SCL on GPIO 1 (TX Pin)
-#define I2C_SDA 4
-#define I2C_SCL 1
 
 // --- NETWORK & GATEWAY ---
 const char* wifiSSID = "YOUR_WIFI_SSID";
@@ -43,7 +36,7 @@ const char* wifiPassword = "YOUR_WIFI_PASSWORD";
 const char* geminiGatewayUrl = "http://YOUR_CLOUDGATEWAY_IP_OR_DOMAIN/api/analyze";
 
 // --- OBJECTS ---
-LiquidCrystal_I2C lcd(0x27, 16, 2);
+// LCD removed
 
 // --- CAM PIN CONFIG FOR AI-THINKER ---
 #define PWDN_GPIO_NUM     32
@@ -179,25 +172,7 @@ String base64Encode(uint8_t* source, size_t length) {
   return output;
 }
 
-// Dynamic text scroll on LCD
-void displayScrollingMessage(String msg) {
-  if (msg.length() <= 16) {
-    lcd.setCursor(0, 1);
-    lcd.print(msg);
-    return;
-  }
-  
-  String extendedMsg = msg + "    ";
-  for (int offset = 0; offset < extendedMsg.length(); offset++) {
-    lcd.setCursor(0, 1);
-    String segment = extendedMsg.substring(offset, offset + 16);
-    while (segment.length() < 16) {
-      segment += " ";
-    }
-    lcd.print(segment);
-    delay(350);
-  }
-}
+// LCD helper functions removed
 
 // Capture frame and consult Gemini Vision API via Cloud Gateway
 String executeAuditAnalysis() {
@@ -282,22 +257,11 @@ void setup() {
   pinMode(MOTOR_IN4, OUTPUT);
   handleMotors("HALT");
   
-  // Init LCD display
-  Wire.begin(I2C_SDA, I2C_SCL);
-  lcd.init();
-  lcd.backlight();
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("SHADOW-SWEEP AI");
-  lcd.setCursor(0, 1);
-  lcd.print("UPLINKING...");
-  
   transitionState(STATE_BOOT);
   
   // Initialize Camera
   if (!initCameraHardware()) {
-    lcd.clear();
-    lcd.print("CAM ERROR");
+    Serial.println("[ERROR] Cam Hardware Fail!");
     while (true) { delay(1000); }
   }
   
@@ -308,13 +272,7 @@ void setup() {
     Serial.print(".");
   }
   Serial.println("\n[SYS] Wi-Fi Link Established");
-  
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("SHADOW-SWEEP AI");
-  lcd.setCursor(0, 1);
-  lcd.print("UPLINK OK");
-  delay(1500);
+  delay(500);
   
   transitionState(STATE_IDLE);
 }
@@ -322,18 +280,10 @@ void setup() {
 void loop() {
   switch (currentTacticalState) {
     case STATE_IDLE: {
-      lcd.setCursor(0, 0);
-      lcd.print("SHADOW-SWEEP AI");
-      lcd.setCursor(0, 1);
-      lcd.print("READY: PENDING CMD");
-      
       // Look for GPIO 0 Button press
       if (digitalRead(START_BUTTON_PIN) == LOW) {
         logTactical("Launch execution initiated by button trigger.");
         delay(250); // Debounce
-        lcd.clear();
-        lcd.setCursor(0, 0);
-        lcd.print("SWEEP ACTIVE...");
         transitionState(STATE_SEARCH);
       }
       break;
@@ -355,40 +305,25 @@ void loop() {
     }
     
     case STATE_LOCK: {
-      lcd.clear();
-      lcd.setCursor(0, 0);
-      lcd.print("TARGET LOCKED");
-      lcd.setCursor(0, 1);
-      lcd.print("STABILIZING...");
+      logTactical("Target locked. Stabilizing scan platform...");
       delay(800); // Wait for vehicle scan platform to stabilize
       transitionState(STATE_ANALYSIS);
       break;
     }
     
     case STATE_ANALYSIS: {
-      lcd.clear();
-      lcd.setCursor(0, 0);
-      lcd.print("ANALYZING THREAT");
-      
+      logTactical("Undercarriage analysis in progress...");
       String threatAssessment = executeAuditAnalysis();
       
-      lcd.clear();
-      lcd.setCursor(0, 0);
-      lcd.print("STATUS:");
+      logTactical("Audit Result Obtained:");
+      Serial.println(threatAssessment);
       
       transitionState(STATE_REPORT);
-      
-      // Render scrolling decision on LCD display row 2
-      displayScrollingMessage(threatAssessment);
       break;
     }
     
     case STATE_REPORT: {
       logTactical("Reporting complete. Disengaging scan zone...");
-      lcd.clear();
-      lcd.setCursor(0, 0);
-      logTactical("Clearing threat sector");
-      lcd.print("CLEARING REGION");
       
       // Evacuate backwards out from under carriage
       handleMotors("REVERSE", 180);
