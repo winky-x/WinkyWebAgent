@@ -16,14 +16,14 @@ const char* password = "YOUR_WIFI_PASSWORD";
 
 // --- PIN MAPPING ---
 // Motors (L298N)
-#define MOTOR_R_IN1 14  // Right Forward (IN1)
+#define MOTOR_R_IN1 13  // Right Forward (IN1)
 #define MOTOR_R_IN2 15  // Right Backward (IN2)
-#define MOTOR_L_IN3 13  // Left Forward (IN3)
-#define MOTOR_L_IN4 12  // Left Backward (IN4)
+#define MOTOR_L_IN3 2   // Left Forward (IN3)
+#define MOTOR_L_IN4 3   // Left Backward (IN4) (RX Pin - Disconnect for Upload!)
 
 // Ultrasonic (HC-SR04)
-#define TRIG_PIN 2
-#define ECHO_PIN 16
+#define TRIG_PIN 12
+#define ECHO_PIN 14     // CRITICAL: Moved from 16 to save the PSRAM
 
 // LCD (I2C)
 // SDA on GPIO 4 (Flash LED) | SCL on GPIO 1 (TX Pin)
