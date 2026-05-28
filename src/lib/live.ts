@@ -17,6 +17,8 @@ export class LiveSession {
   private textResponseActive: boolean = false;
   private textResponseTimeout: any = null;
   private ignoreAckUntil: number = 0;
+  private isSetupComplete: boolean = false;
+  private activeConnectionId: number = 0;
 
   public onMessage: (msg: { role: string, text: string, isFinal?: boolean, isTranscription?: boolean }) => void = () => { };
   public onInterrupted: () => void = () => { };
@@ -29,6 +31,9 @@ export class LiveSession {
 
   async connect() {
     if (this.isConnected) return;
+    this.isSetupComplete = false;
+    const connectionId = ++this.activeConnectionId;
+    console.log(`[LiveSession] Starting connection #${connectionId}`);
 
     // 2. Fetch the key dynamically when connecting
     const key = getGeminiKey();
@@ -40,23 +45,54 @@ export class LiveSession {
     const ai = new GoogleGenAI({ apiKey: key });
 
     this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+    console.log("[LiveSession] Created audioContext. Initial state:", this.audioContext.state);
+    if (this.audioContext.state === 'suspended') {
+      console.log("[LiveSession] audioContext is suspended, attempting to resume...");
+      this.audioContext.resume().then(() => {
+        if (connectionId === this.activeConnectionId) {
+          console.log("[LiveSession] audioContext resumed successfully. State:", this.audioContext?.state);
+        }
+      }).catch(err => {
+        if (connectionId === this.activeConnectionId) {
+          console.error("[LiveSession] Failed to resume audioContext:", err);
+        }
+      });
+    }
     this.nextStartTime = this.audioContext.currentTime;
 
+    console.log("[LiveSession] Connecting to live API model gemini-3.1-flash-live-preview...");
     this.sessionPromise = ai.live.connect({
       model: "gemini-3.1-flash-live-preview",
       callbacks: {
         onopen: async () => {
+          if (connectionId !== this.activeConnectionId) {
+            console.log(`[LiveSession] Ignoring onopen for stale connection #${connectionId}`);
+            return;
+          }
+          console.log(`[LiveSession] WebSocket connection #${connectionId} opened successfully.`);
           this.isConnected = true;
           await this.startMicrophone();
         },
         onmessage: async (message: LiveServerMessage) => {
+          if (connectionId !== this.activeConnectionId) {
+            return;
+          }
           this.handleMessage(message);
         },
         onclose: () => {
+          if (connectionId !== this.activeConnectionId) {
+            console.log(`[LiveSession] Ignoring onclose for stale connection #${connectionId}`);
+            return;
+          }
+          console.log(`[LiveSession] WebSocket connection #${connectionId} closed.`);
           this.disconnect();
         },
         onerror: (error) => {
-          console.error("Live API Error:", error);
+          if (connectionId !== this.activeConnectionId) {
+            console.log(`[LiveSession] Ignoring onerror for stale connection #${connectionId}`);
+            return;
+          }
+          console.error(`Live API Error on connection #${connectionId}:`, error);
           this.onError(error);
           this.disconnect();
         }
@@ -76,15 +112,30 @@ export class LiveSession {
 
   private async startMicrophone() {
     try {
+      console.log("[LiveSession] Requesting microphone access...");
       this.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      console.log("[LiveSession] Microphone access granted.");
+
       this.micContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+      console.log("[LiveSession] Created micContext. Initial state:", this.micContext.state);
+
+      if (this.micContext.state === 'suspended') {
+        console.log("[LiveSession] micContext is suspended, attempting to resume...");
+        await this.micContext.resume();
+        console.log("[LiveSession] micContext resumed. State:", this.micContext.state);
+      }
+
       const source = this.micContext.createMediaStreamSource(this.mediaStream);
       this.scriptProcessor = this.micContext.createScriptProcessor(4096, 1, 1);
       source.connect(this.scriptProcessor);
       this.scriptProcessor.connect(this.micContext.destination);
 
+      let pcmChunkCount = 0;
       this.scriptProcessor.onaudioprocess = (e) => {
+        pcmChunkCount++;
+
         if (!this.isConnected || !this.sessionPromise || this.isMuted) return;
+        if (!this.isSetupComplete) return;
         if (this.textResponseActive) return;
 
         const inputData = e.inputBuffer.getChannelData(0);
@@ -101,8 +152,9 @@ export class LiveSession {
         }
         const base64Data = btoa(binary);
         this.sessionPromise.then((session) => {
+          // FIX: Use 'audio' property (maps to audio field) instead of 'media' (maps to mediaChunks/images)
           session.sendRealtimeInput({
-            media: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
+            audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
           });
         });
       };
@@ -113,6 +165,11 @@ export class LiveSession {
   }
 
   private async handleMessage(message: LiveServerMessage) {
+    console.log("[LiveSession] handleMessage received:", JSON.stringify(message));
+    if (message.setupComplete) {
+      console.log("[LiveSession] Received setupComplete from server. Enabling audio stream.");
+      this.isSetupComplete = true;
+    }
     if (this.onRawMessage) {
       this.onRawMessage(message);
     }
@@ -148,9 +205,10 @@ export class LiveSession {
     }
 
     if (message.serverContent?.turnComplete) {
-      if (isAckWindow) return; // Ignore abort ack
-
+      // Always reset textResponseActive on turnComplete — prevents mic from being blocked for 15s
       this.textResponseActive = false;
+      if (this.textResponseTimeout) { clearTimeout(this.textResponseTimeout); this.textResponseTimeout = null; }
+      if (isAckWindow) return; // Ignore abort ack for UI purposes only
       this.onMessage({ role: 'assistant', text: '', isFinal: true });
     }
 
@@ -238,7 +296,11 @@ export class LiveSession {
   }
 
   async sendText(text: string, attachments: Attachment[] = []) {
-    if (!this.sessionPromise || !this.isConnected) return;
+    console.log(`[LiveSession] sendText called with text="${text}", attachments=${attachments.length}`);
+    if (!this.sessionPromise || !this.isConnected) {
+      console.warn(`[LiveSession] Cannot sendText. isConnected=${this.isConnected}, sessionPromiseExists=${!!this.sessionPromise}`);
+      return;
+    }
     
     this.stopAudio();
     // Completely pause mic during text response generation and ignore incoming abort acks for 1.2s
@@ -246,7 +308,10 @@ export class LiveSession {
     this.ignoreAckUntil = Date.now() + 1200;
     
     if (this.textResponseTimeout) clearTimeout(this.textResponseTimeout);
-    this.textResponseTimeout = setTimeout(() => { this.textResponseActive = false; }, 15000);
+    this.textResponseTimeout = setTimeout(() => { 
+      console.log("[LiveSession] textResponseTimeout fired. Resetting textResponseActive to false.");
+      this.textResponseActive = false; 
+    }, 15000);
     
     try {
       const session = await this.sessionPromise;
@@ -265,23 +330,12 @@ export class LiveSession {
         });
       }
 
-      const payload = {
-        clientContent: {
-          turns: [{ role: 'user', parts }],
-          turnComplete: true
-        }
-      };
-
-      // 3. Bulletproof SDK method fallback
-      if (typeof session.send === 'function') {
-        await session.send(payload);
-      } else if (typeof session.sendClientContent === 'function') {
-        await session.sendClientContent(payload.clientContent);
-      } else if (typeof session.sendRealtimeInput === 'function') {
-        await session.sendRealtimeInput(payload);
-      } else {
-        throw new Error("No valid send method found on session.");
-      }
+      // FIX: Use sendClientContent directly — the correct SDK method for text/structured content
+      session.sendClientContent({
+        turns: [{ role: 'user', parts }],
+        turnComplete: true
+      });
+      console.log("[LiveSession] sendText completed via sendClientContent.");
     } catch (error) {
       console.error("Failed to send text to Live API:", error);
       this.onError(new Error("Failed to send text in Voice Mode."));
@@ -290,6 +344,8 @@ export class LiveSession {
 
   disconnect() {
     this.isConnected = false;
+    this.isSetupComplete = false;
+    this.activeConnectionId++;
     this.stopAudio();
     if (this.scriptProcessor) {
       this.scriptProcessor.disconnect();

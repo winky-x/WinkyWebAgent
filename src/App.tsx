@@ -291,7 +291,6 @@ export default function App() {
         setVoiceMode(false);
       };
 
-      liveSessionRef.current.setMuted(isMuted);
       liveSessionRef.current.connect();
     } else {
       if (liveSessionRef.current) {
@@ -304,7 +303,14 @@ export default function App() {
         liveSessionRef.current.disconnect();
       }
     };
-  }, [activeView, voiceMode, isMuted]);
+  }, [activeView, voiceMode]);
+
+  // Sync mute state to Live session without triggering full reconnect
+  useEffect(() => {
+    if (liveSessionRef.current) {
+      liveSessionRef.current.setMuted(isMuted);
+    }
+  }, [isMuted]);
 
   const stopSpeaking = () => {
     if (currentAudioSourceRef.current) {
@@ -319,6 +325,12 @@ export default function App() {
       liveSessionRef.current.stopAudio();
     }
     setIsSpeaking(false);
+    
+    // Force reset UI message trackers so new responses start in a fresh bubble
+    currentAssistantMessageId.current = '';
+    currentAssistantText.current = '';
+    currentUserMessageId.current = '';
+    currentUserText.current = '';
   };
 
   const handleEmergencyStop = () => {
