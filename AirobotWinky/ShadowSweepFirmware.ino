@@ -28,7 +28,7 @@
 #define MOTOR_IN4 12  // Left Backward (IN4)
 
 #define FLASH_LED_PIN 4
-#define START_BUTTON_PIN 0
+#define START_BUTTON_PIN 1
 
 // --- NETWORK & GATEWAY ---
 const char* wifiSSID = "YOUR_WIFI_SSID";
