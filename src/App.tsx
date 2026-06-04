@@ -197,9 +197,33 @@ export default function App() {
         if (incomingAttachments.length > 0) setAttachments(incomingAttachments);
 
         // 3. Automatically trigger the send function
-        setTimeout(() => {
-          handleSend(incomingText || '', incomingAttachments); 
-        }, 100);
+        if (activeView === 'chat' && voiceMode) {
+          // In Voice Mode, wait for WebSocket connection to be active so response is spoken
+          const checkConnection = setInterval(() => {
+            if (liveSessionRef.current && liveSessionRef.current.isConnected) {
+              clearInterval(checkConnection);
+              handleSend(incomingText || '', incomingAttachments);
+              setInputText('');
+              setAttachments([]);
+            }
+          }, 100);
+
+          // Safety timeout after 5 seconds to fallback to REST stream
+          setTimeout(() => {
+            clearInterval(checkConnection);
+            if (!liveSessionRef.current || !liveSessionRef.current.isConnected) {
+              handleSend(incomingText || '', incomingAttachments);
+              setInputText('');
+              setAttachments([]);
+            }
+          }, 5000);
+        } else {
+          setTimeout(() => {
+            handleSend(incomingText || '', incomingAttachments);
+            setInputText('');
+            setAttachments([]);
+          }, 100);
+        }
 
         // 4. Clean up the URL so it doesn't re-trigger on page refresh
         window.history.replaceState({}, document.title, window.location.pathname);
