@@ -164,6 +164,51 @@ export default function App() {
     scrollToBottom();
   }, [messages]);
 
+  // Handle incoming redirect and auto-send
+  useEffect(() => {
+    const handleIncomingForward = async () => {
+      const params = new URLSearchParams(window.location.search);
+      const autoSend = params.get('auto_send');
+      const incomingText = params.get('q');
+      const incomingTool = params.get('tool');
+      let incomingAttachments: Attachment[] = [];
+
+      // 1. Process base64 attachments from the URL hash
+      if (window.location.hash.startsWith('#attachments=')) {
+        try {
+          const encodedData = window.location.hash.slice('#attachments='.length);
+          const parsed = JSON.parse(decodeURIComponent(encodedData));
+          
+          incomingAttachments = parsed.map((att: any) => ({
+            mimeType: att.mimeType,
+            data: att.data, // base64 string
+            url: `data:${att.mimeType};base64,${att.data}` 
+          }));
+        } catch (error) {
+          console.error('Failed to parse incoming attachments from hash:', error);
+        }
+      }
+
+      if (autoSend === 'true') {
+        // 2. Set the UI states
+        if (incomingText) setInputText(incomingText);
+        if (incomingTool) setSelectedTool(incomingTool);
+
+        // 3. Automatically trigger the send function
+        setTimeout(() => {
+          handleSend(incomingText || '', incomingAttachments); 
+        }, 100);
+
+        // 4. Clean up the URL so it doesn't re-trigger on page refresh
+        const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+        window.history.replaceState({ path: cleanUrl }, '', cleanUrl);
+      }
+    };
+
+    handleIncomingForward();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Robot Mode Startup + ESP32 Health Monitor
   useEffect(() => {
     if (activeView !== 'robot') return;
