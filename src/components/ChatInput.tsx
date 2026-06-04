@@ -38,10 +38,23 @@ interface ChatInputProps {
   onMuteChange: (muted: boolean) => void;
   selectedTool?: string;
   onToolSelect?: (tool: string) => void;
+  attachments: Attachment[];
+  setAttachments: React.Dispatch<React.SetStateAction<Attachment[]>>;
 }
 
-export function ChatInput({ onSend, disabled, voiceMode, value, onChange, isMuted, onMuteChange, selectedTool, onToolSelect }: ChatInputProps) {
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
+export function ChatInput({ 
+  onSend, 
+  disabled, 
+  voiceMode, 
+  value, 
+  onChange, 
+  isMuted, 
+  onMuteChange, 
+  selectedTool, 
+  onToolSelect,
+  attachments,
+  setAttachments
+}: ChatInputProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [showTools, setShowTools] = useState(false);
 

@@ -130,6 +130,7 @@ export default function App() {
   const [inputText, setInputText] = useState('');
   const [isMuted, setIsMuted] = useState(false);
   const [selectedTool, setSelectedTool] = useState<string>('');
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
   const pcmPlayerRef = useRef<PCMStreamPlayer | null>(null);
   // Robot Mode telemetry state
   const [esp32Online, setEsp32Online] = useState<boolean | null>(null);
@@ -193,6 +194,7 @@ export default function App() {
         // 2. Set the UI states
         if (incomingText) setInputText(incomingText);
         if (incomingTool) setSelectedTool(incomingTool);
+        if (incomingAttachments.length > 0) setAttachments(incomingAttachments);
 
         // 3. Automatically trigger the send function
         setTimeout(() => {
@@ -200,8 +202,7 @@ export default function App() {
         }, 100);
 
         // 4. Clean up the URL so it doesn't re-trigger on page refresh
-        const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
-        window.history.replaceState({ path: cleanUrl }, '', cleanUrl);
+        window.history.replaceState({}, document.title, window.location.pathname);
       }
     };
 
@@ -862,6 +863,8 @@ export default function App() {
                 onMuteChange={setIsMuted}
                 selectedTool={selectedTool}
                 onToolSelect={setSelectedTool}
+                attachments={attachments}
+                setAttachments={setAttachments}
               />
             </div>
           </div>
