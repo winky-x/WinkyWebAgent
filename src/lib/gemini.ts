@@ -70,6 +70,44 @@ export const getGeminiKey = (): string => {
 };
 
 // ============================================================================
+// Grounding Citation Formatter
+// ============================================================================
+
+export function formatGroundingCitations(text: string, metadata: any): string {
+  if (!metadata || !metadata.groundingSupports || !metadata.groundingChunks) {
+    return text;
+  }
+  
+  const supports = metadata.groundingSupports;
+  const chunks = metadata.groundingChunks;
+  let formattedText = text;
+  
+  // Sort supports by endIndex descending so inserting links doesn't mess up text positioning
+  const sortedSupports = [...supports].sort(
+    (a, b) => (b.segment?.endIndex ?? 0) - (a.segment?.endIndex ?? 0)
+  );
+
+  for (const support of sortedSupports) {
+    const endIndex = support.segment?.endIndex;
+    if (endIndex === undefined || !support.groundingChunkIndices?.length) continue;
+
+    const citationLinks = support.groundingChunkIndices.map((i: number) => {
+      const uri = chunks[i]?.web?.uri;
+      return uri ? `[${i + 1}](${uri})` : null;
+    }).filter(Boolean);
+
+    if (citationLinks.length > 0) {
+      const citationString = " " + citationLinks.join(", ");
+      if (endIndex <= formattedText.length) {
+        formattedText = formattedText.slice(0, endIndex) + citationString + formattedText.slice(endIndex);
+      }
+    }
+  }
+  
+  return formattedText;
+}
+
+// ============================================================================
 // Main Chat Session Manager
 // ============================================================================
 
@@ -115,25 +153,42 @@ private async *handleGoogleStream(options: GenerateOptions): AsyncGenerator<Stre
     let accumulatedThought = "";
 
     while (!isDone) {
-      const config: any = {
-        systemInstruction: options.isRobotMode ? ROBOT_SYSTEM_INSTRUCTION : STANDARD_SYSTEM_INSTRUCTION,
-        safetySettings: [{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" }],
-        tools: [] // Initialize as an empty array
-      };
+      let baseInstruction = options.isRobotMode ? ROBOT_SYSTEM_INSTRUCTION : STANDARD_SYSTEM_INSTRUCTION;
 
-      // 1. Add your custom function tools (Calculator, etc.)
-      if (toolDeclarations && toolDeclarations.length > 0) {
-        config.tools.push({ functionDeclarations: toolDeclarations });
-      } else {
-        // 2. Add Google Search Grounding ONLY if no function tools are present
-        // Gemini API currently does not support combining both in a single request.
-        config.tools.push({ googleSearch: {} });
+      const selected = options.selectedTool || '';
+
+      if (selected === 'fast_google_search') {
+        baseInstruction += "\n\n# CRITICAL INSTRUCTION: You MUST use the Google Search tool immediately to answer this query. Keep the response extremely fast, concise, and direct.";
+      } else if (selected === 'detailed_google_search') {
+        baseInstruction += "\n\n# CRITICAL INSTRUCTION: You MUST use the Google Search tool immediately to perform a detailed search. Gather comprehensive information, analyze the search results, and construct a detailed, thorough response with citations.";
+      } else if (selected === 'read_webpage_content') {
+        baseInstruction += "\n\n# CRITICAL INSTRUCTION: You MUST use the read_webpage_content tool to scrape and read the user's specified URL.";
       }
 
-      if (options.selectedTool && config.tools) {
-        config.toolConfig = {
-          functionCallingConfig: { mode: "ANY", allowedFunctionNames: [options.selectedTool] }
-        };
+      const config: any = {
+        systemInstruction: baseInstruction,
+        safetySettings: [{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" }],
+        tools: []
+      };
+
+      if (selected === 'fast_google_search' || selected === 'detailed_google_search') {
+        // Force ONLY Google Search grounding
+        config.tools.push({ googleSearch: {} });
+        // Omit toolConfig as googleSearch is a system capability, not a custom function definition
+      } else {
+        // Include custom functions if defined
+        if (toolDeclarations && toolDeclarations.length > 0) {
+          config.tools.push({ functionDeclarations: toolDeclarations });
+        }
+        // Always combine with Google Search Grounding for autonomous capability
+        config.tools.push({ googleSearch: {} });
+
+        if (selected && selected !== '') {
+          // If a custom function is selected, restrict routing to it
+          config.toolConfig = {
+            functionCallingConfig: { mode: "ANY", allowedFunctionNames: [selected] }
+          };
+        }
       }
 
       const safeModelId = options.modelId || 'gemini-2.5-flash-lite';
@@ -170,67 +225,37 @@ private async *handleGoogleStream(options: GenerateOptions): AsyncGenerator<Stre
       let currentLoopText = "";
       let currentLoopThought = "";
       let functionCallParts: any[] = []; // Fix: Store RAW parts to keep the thought_signature
-      let groundingChunks: any[] | null = null;
+      let groundingMetadata: any = null;
 
       for await (const chunk of stream) {
         const c = chunk as any;
         
         // Check if the AI used Google Search and returned metadata
         if (c.candidates?.[0]?.groundingMetadata) {
-          const metadata = c.candidates[0].groundingMetadata;
-          groundingChunks = metadata.groundingChunks;
-          
-          // Apply inline citations if the AI provided grounding supports
-          if (metadata.groundingSupports && metadata.groundingChunks && c.text) {
-             let formattedText = c.text;
-             const supports = metadata.groundingSupports;
-             const chunks = metadata.groundingChunks;
-             
-             // Sort supports by endIndex descending so inserting links doesn't mess up text positioning
-             const sortedSupports = [...supports].sort(
-                (a, b) => (b.segment?.endIndex ?? 0) - (a.segment?.endIndex ?? 0)
-             );
-
-             for (const support of sortedSupports) {
-                const endIndex = support.segment?.endIndex;
-                if (endIndex === undefined || !support.groundingChunkIndices?.length) continue;
-
-                const citationLinks = support.groundingChunkIndices.map((i: number) => {
-                   const uri = chunks[i]?.web?.uri;
-                   return uri ? `[${i + 1}](${uri})` : null;
-                }).filter(Boolean);
-
-                if (citationLinks.length > 0) {
-                   const citationString = " " + citationLinks.join(", ");
-                   formattedText = formattedText.slice(0, endIndex) + citationString + formattedText.slice(endIndex);
-                }
-             }
-             
-             // Override the raw chunk text with our newly cited text
-             c.text = formattedText;
-          }
+          groundingMetadata = c.candidates[0].groundingMetadata;
         }
-
 
         if (c.thought) {
           currentLoopThought += c.thought;
-          yield { 
-            text: accumulatedText + currentLoopText, 
-            thought: accumulatedThought + currentLoopThought, 
-            groundingChunks, 
-            isDone: false, 
-            isThinking: true 
-          };
         }
 
         if (c.text) {
           currentLoopText += c.text;
+        }
+
+        // Apply grounding citations dynamically on the current turn's accumulated text
+        let citedText = currentLoopText;
+        if (groundingMetadata) {
+          citedText = formatGroundingCitations(currentLoopText, groundingMetadata);
+        }
+
+        if (c.thought || c.text) {
           yield { 
-            text: accumulatedText + currentLoopText, 
+            text: accumulatedText + citedText, 
             thought: accumulatedThought + currentLoopThought, 
-            groundingChunks, 
+            groundingChunks: groundingMetadata?.groundingChunks || null, 
             isDone: false, 
-            isThinking: false 
+            isThinking: !!c.thought 
           };
         }
 
@@ -245,6 +270,12 @@ private async *handleGoogleStream(options: GenerateOptions): AsyncGenerator<Stre
             }
           }
         }
+      }
+
+      // Finalize text with citations
+      let finalCitedText = currentLoopText;
+      if (groundingMetadata) {
+        finalCitedText = formatGroundingCitations(currentLoopText, groundingMetadata);
       }
 
       // Finalize history using the preserved raw parts
@@ -264,7 +295,7 @@ private async *handleGoogleStream(options: GenerateOptions): AsyncGenerator<Stre
         for (const rawPart of functionCallParts) {
           const fc = rawPart.functionCall;
           yield { 
-            text: accumulatedText + currentLoopText + `\n\n*Using tool: ${fc.name}...*\n`, 
+            text: accumulatedText + finalCitedText + `\n\n*Using tool: ${fc.name}...*\n`, 
             thought: accumulatedThought + currentLoopThought, 
             isDone: false, 
             isThinking: true 
@@ -287,9 +318,9 @@ private async *handleGoogleStream(options: GenerateOptions): AsyncGenerator<Stre
       } else {
         isDone = true;
         yield { 
-          text: accumulatedText + currentLoopText, 
+          text: accumulatedText + finalCitedText, 
           thought: accumulatedThought + currentLoopThought, 
-          groundingChunks, 
+          groundingChunks: groundingMetadata?.groundingChunks || null, 
           isDone: true, 
           isThinking: false 
         };
@@ -324,7 +355,6 @@ private async *handleGoogleStream(options: GenerateOptions): AsyncGenerator<Stre
  */
 function sanitizeForTTS(text: string): string {
   return text
-    .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E6}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '') // Emojis
     .replace(/\*Using tool:.*?\*/g, '') // Internal tool markers
     .replace(/[`*_#]/g, '') // Markdown formatting
     .replace(/\s+/g, ' ') // Collapse whitespace

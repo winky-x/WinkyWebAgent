@@ -55,6 +55,17 @@ export const toolDeclarations: FunctionDeclaration[] = [
       },
       required: ["coinId"]
     }
+  },
+  {
+    name: "read_webpage_content",
+    description: "Purpose: Deep diving into specific links found via search. Target Mode: Thinking Mode. Expected Behavior: Accepts a URL, retrieves page content, and returns raw text/markdown.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        url: { type: Type.STRING, description: "The URL of the webpage to read" }
+      },
+      required: ["url"]
+    }
   }
 ];
 
@@ -154,6 +165,17 @@ export const executeTool = async (name: string, args: any): Promise<any> => {
           return { error: `Could not find price for ${coinId}. Please check the coin ID.` };
         } catch (e: any) {
           return { error: `Error fetching crypto price: ${e.message}` };
+        }
+      }
+
+      case "read_webpage_content": {
+        try {
+          const res = await fetch(`https://r.jina.ai/${encodeURIComponent(args.url)}`);
+          if (!res.ok) throw new Error(`Status ${res.status}`);
+          const text = await res.text();
+          return { content: text.substring(0, 8000), url: args.url };
+        } catch (e: any) {
+          return { error: `Error reading webpage content: ${e.message}. Please inform the user.` };
         }
       }
 

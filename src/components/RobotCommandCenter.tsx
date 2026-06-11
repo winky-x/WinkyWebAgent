@@ -34,6 +34,8 @@ interface RobotCommandCenterProps {
   onToolSelect: (t: string) => void;
   inputText: string;
   onInputChange: (v: string) => void;
+  attachments: Attachment[];
+  setAttachments: React.Dispatch<React.SetStateAction<Attachment[]>>;
 }
 
 // ─── Emotion Config ───────────────────────────────────────────────────────────
@@ -388,6 +390,7 @@ export function RobotCommandCenter({
   emotion, robotSpeakingText, isRobotStreaming,
   onSend, onEmergencyStop, isMuted, onMuteChange,
   selectedTool, onToolSelect, inputText, onInputChange,
+  attachments, setAttachments,
 }: RobotCommandCenterProps) {
   const handleQuickCommand = useCallback(async (cmd: string) => {
     await executeKinematicsSingle({ command: cmd, speed: 180, duration_ms: 400 });
@@ -453,6 +456,8 @@ export function RobotCommandCenter({
           onMuteChange={onMuteChange}
           selectedTool={selectedTool}
           onToolSelect={onToolSelect}
+          attachments={attachments}
+          setAttachments={setAttachments}
         />
       </div>
     </div>

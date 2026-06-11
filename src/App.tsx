@@ -500,14 +500,27 @@ export default function App() {
     pcmPlayerRef.current = freshPlayer;
     const orchestrator = new SpeechOrchestrator(freshPlayer);
 
-    try {
-      const stream = chatSessionRef.current!.sendMessageStream(safeText, safeAttachments, {
-        voiceMode: activeView === 'robot' ? true : voiceMode,
-        isRobotMode: activeView === 'robot',
-        selectedTool: currentSelectedTool || '',
-        provider: 'google',
-        modelId: activeView === 'robot' ? 'gemini-2.5-flash-lite' : (voiceMode ? 'gemini-2.5-flash-lite' : 'gemini-3.1-flash-lite-preview')
-      });
+      try {
+        let resolvedModelId = 'gemini-2.5-flash-lite';
+        if (activeView === 'robot') {
+          resolvedModelId = 'gemini-2.5-flash-lite';
+        } else if (currentSelectedTool === 'fast_google_search') {
+          resolvedModelId = 'gemini-2.5-flash-lite';
+        } else if (currentSelectedTool === 'detailed_google_search') {
+          resolvedModelId = 'gemini-2.5-flash';
+        } else if (voiceMode) {
+          resolvedModelId = 'gemini-2.5-flash-lite';
+        } else {
+          resolvedModelId = 'gemini-3.1-flash-lite-preview';
+        }
+
+        const stream = chatSessionRef.current!.sendMessageStream(safeText, safeAttachments, {
+          voiceMode: activeView === 'robot' ? true : voiceMode,
+          isRobotMode: activeView === 'robot',
+          selectedTool: currentSelectedTool || '',
+          provider: 'google',
+          modelId: resolvedModelId
+        });
 
       let finalText = "";
       let finalThought = "";
@@ -705,6 +718,8 @@ export default function App() {
             </button>
           )}
 
+
+
           {messages.length > 0 && (
             <button
               onClick={clearChat}
@@ -760,6 +775,8 @@ export default function App() {
             onToolSelect={setSelectedTool}
             inputText={inputText}
             onInputChange={setInputText}
+            attachments={attachments}
+            setAttachments={setAttachments}
           />
         </div>
       ) : (
