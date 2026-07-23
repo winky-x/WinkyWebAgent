@@ -7,6 +7,7 @@
 import { GoogleGenAI, ThinkingLevel, Content } from "@google/genai";
 import { toolDeclarations, executeTool } from "./tools";
 import { STANDARD_SYSTEM_INSTRUCTION, ROBOT_SYSTEM_INSTRUCTION } from "./prompt";
+import { THINKING_SYSTEM_INSTRUCTION } from "./thinkingPrompt";
 
 // ============================================================================
 // Types & Interfaces
@@ -153,7 +154,9 @@ private async *handleGoogleStream(options: GenerateOptions): AsyncGenerator<Stre
     let accumulatedThought = "";
 
     while (!isDone) {
-      let baseInstruction = options.isRobotMode ? ROBOT_SYSTEM_INSTRUCTION : STANDARD_SYSTEM_INSTRUCTION;
+      let baseInstruction = options.isRobotMode 
+        ? ROBOT_SYSTEM_INSTRUCTION 
+        : (!options.voiceMode ? THINKING_SYSTEM_INSTRUCTION : STANDARD_SYSTEM_INSTRUCTION);
 
       const selected = options.selectedTool || '';
 
@@ -168,20 +171,15 @@ private async *handleGoogleStream(options: GenerateOptions): AsyncGenerator<Stre
       const config: any = {
         systemInstruction: baseInstruction,
         safetySettings: [{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" }],
-        tools: []
       };
 
       if (selected === 'fast_google_search' || selected === 'detailed_google_search') {
         // Force ONLY Google Search grounding
-        config.tools.push({ googleSearch: {} });
+        config.tools = [{ googleSearch: {} }];
         // Omit toolConfig as googleSearch is a system capability, not a custom function definition
-      } else {
-        // Include custom functions if defined
-        if (toolDeclarations && toolDeclarations.length > 0) {
-          config.tools.push({ functionDeclarations: toolDeclarations });
-        }
-        // Always combine with Google Search Grounding for autonomous capability
-        config.tools.push({ googleSearch: {} });
+      } else if (toolDeclarations && toolDeclarations.length > 0) {
+        // Include custom functions (cannot combine googleSearch and functionDeclarations)
+        config.tools = [{ functionDeclarations: toolDeclarations }];
 
         if (selected && selected !== '') {
           // If a custom function is selected, restrict routing to it
@@ -194,11 +192,18 @@ private async *handleGoogleStream(options: GenerateOptions): AsyncGenerator<Stre
       const safeModelId = options.modelId || 'gemini-2.5-flash-lite';
     
 
-      if (!options.voiceMode && (safeModelId.includes('thinking') || safeModelId === 'gemini-3.1-flash-lite-preview')) {
-        config.thinkingConfig = { 
-          thinkingLevel: ThinkingLevel.HIGH,
-          includeThoughts: true 
-        };
+      if (!options.voiceMode) {
+        if (safeModelId.startsWith('gemini-3')) {
+          config.thinkingConfig = { 
+            thinkingLevel: ThinkingLevel.HIGH,
+            includeThoughts: true 
+          };
+        } else {
+          config.thinkingConfig = { 
+            thinkingBudget: 2048,
+            includeThoughts: true 
+          };
+        }
       }
 
       let stream;
@@ -235,8 +240,20 @@ private async *handleGoogleStream(options: GenerateOptions): AsyncGenerator<Stre
           groundingMetadata = c.candidates[0].groundingMetadata;
         }
 
+        // Extract thought content from top-level c.thought OR parts[].thought
         if (c.thought) {
           currentLoopThought += c.thought;
+        }
+        
+        if (c.candidates?.[0]?.content?.parts) {
+          for (const part of c.candidates[0].content.parts) {
+            if (part.thought && part.text) {
+              // Avoid duplicate if c.thought already captured it
+              if (!c.thought) {
+                currentLoopThought += part.text;
+              }
+            }
+          }
         }
 
         if (c.text) {
@@ -249,13 +266,13 @@ private async *handleGoogleStream(options: GenerateOptions): AsyncGenerator<Stre
           citedText = formatGroundingCitations(currentLoopText, groundingMetadata);
         }
 
-        if (c.thought || c.text) {
+        if (currentLoopThought || c.text) {
           yield { 
             text: accumulatedText + citedText, 
             thought: accumulatedThought + currentLoopThought, 
             groundingChunks: groundingMetadata?.groundingChunks || null, 
             isDone: false, 
-            isThinking: !!c.thought 
+            isThinking: currentLoopThought.length > 0 && !c.text 
           };
         }
 
@@ -278,10 +295,9 @@ private async *handleGoogleStream(options: GenerateOptions): AsyncGenerator<Stre
         finalCitedText = formatGroundingCitations(currentLoopText, groundingMetadata);
       }
 
-      // Finalize history using the preserved raw parts
+      // Finalize history using valid API parts (text and functionCall)
       const modelParts: any[] = [];
       if (currentLoopText) modelParts.push({ text: currentLoopText });
-      if (currentLoopThought) modelParts.push({ thought: currentLoopThought } as any);
       
       if (functionCallParts.length > 0) {
         modelParts.push(...functionCallParts);
