@@ -1,23 +1,26 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { 
+import {
   Plus,
   Paperclip,
-  Mic, 
-  Globe, 
-  Sparkles, 
-  Search, 
-  Zap, 
-  CloudSun, 
-  BookOpen, 
-  Calculator, 
-  Clock, 
-  Coins, 
-  Check, 
-  ChevronDown, 
-  ArrowUp, 
-  Loader, 
+  Mic,
+  Globe,
+  Sparkles,
+  Search,
+  Zap,
+  CloudSun,
+  BookOpen,
+  Calculator,
+  Clock,
+  Coins,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  ArrowUp,
+  Loader,
   Activity,
-  X
+  X,
+  Terminal,
+  ShieldAlert
 } from 'lucide-react';
 import { Attachment } from '@/lib/gemini';
 import { toast } from 'sonner';
@@ -34,22 +37,28 @@ export interface ThinkingChatInputProps {
   attachments: Attachment[];
   setAttachments: React.Dispatch<React.SetStateAction<Attachment[]>>;
   bgColor?: string;
+  isOsintMode?: boolean;
+  onToggleOsintMode?: (active: boolean) => void;
 }
 
-export function ThinkingChatInput({ 
-  onSend, 
-  disabled, 
-  value, 
-  onChange, 
-  selectedTool = '', 
+export function ThinkingChatInput({
+  onSend,
+  disabled,
+  value,
+  onChange,
+  selectedTool = '',
   onToolSelect,
   attachments,
   setAttachments,
-  bgColor
+  bgColor,
+  isOsintMode = false,
+  onToggleOsintMode
 }: ThinkingChatInputProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [showTools, setShowTools] = useState(false);
   const [showActionMenu, setShowActionMenu] = useState(false);
+  const [showSlashMenu, setShowSlashMenu] = useState(false);
+  const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -57,6 +66,32 @@ export function ThinkingChatInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const toolsRef = useRef<HTMLDivElement>(null);
+  const slashMenuRef = useRef<HTMLDivElement>(null);
+
+  const slashCommands = [
+    {
+      id: 'osint',
+      label: '/hacking (Hacking Mode)',
+      description: 'Hacking Mode for ethical hacking and security research',
+      icon: <Terminal className="w-4 h-4 text-red-400" />,
+      action: () => {
+        onToggleOsintMode?.(!isOsintMode);
+      }
+    },
+    {
+      id: 'search',
+      label: '/search (Web Search)',
+      description: 'Toggle Google web search grounding mode',
+      icon: <Globe className="w-4 h-4 text-blue-400" />,
+      action: () => {
+        if (selectedTool === 'fast_google_search') {
+          onToolSelect?.('');
+        } else {
+          onToolSelect?.('fast_google_search');
+        }
+      }
+    }
+  ];
 
   const availableTools = [
     { id: '', label: 'Autonomous Intelligence', icon: <Sparkles className="w-3.5 h-3.5" />, color: 'text-violet-400' },
@@ -80,6 +115,18 @@ export function ThinkingChatInput({
     }
   }, [value]);
 
+  // Handle slash command detection when input changes
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    onChange(val);
+    if (val === '/') {
+      setShowSlashMenu(true);
+      setSlashSelectedIndex(0);
+    } else if (!val.startsWith('/')) {
+      setShowSlashMenu(false);
+    }
+  };
+
   // Click outside handlers
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -89,10 +136,49 @@ export function ThinkingChatInput({
       if (toolsRef.current && !toolsRef.current.contains(e.target as Node)) {
         setShowTools(false);
       }
+      if (slashMenuRef.current && !slashMenuRef.current.contains(e.target as Node)) {
+        setShowSlashMenu(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  const executeSlashCommand = (cmd: typeof slashCommands[0]) => {
+    cmd.action();
+    onChange('');
+    setShowSlashMenu(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (showSlashMenu) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSlashSelectedIndex((prev) => (prev + 1) % slashCommands.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSlashSelectedIndex((prev) => (prev - 1 + slashCommands.length) % slashCommands.length);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        executeSlashCommand(slashCommands[slashSelectedIndex]);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowSlashMenu(false);
+        return;
+      }
+    }
+
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
 
   const startRecording = async () => {
     try {
@@ -135,13 +221,7 @@ export function ThinkingChatInput({
       setAttachments([]);
       setShowTools(false);
       setShowActionMenu(false);
-    }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
+      setShowSlashMenu(false);
     }
   };
 
@@ -182,39 +262,119 @@ export function ThinkingChatInput({
 
   return (
     <div className="relative w-full max-w-3xl mx-auto px-1 sm:px-4 pb-1 sm:pb-3">
-      <input 
-        type="file" 
-        ref={fileInputRef} 
-        onChange={handleFileChange} 
-        className="hidden" 
-        multiple 
-        accept="image/*,video/*,audio/*" 
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        className="hidden"
+        multiple
+        accept="image/*,video/*,audio/*"
       />
 
+      {/* COMPACT SLASH COMMAND POPOVER — ALIGNED FLUSH LEFT ABOVE INPUT TEXT */}
+      <AnimatePresence>
+        {showSlashMenu && (
+          <motion.div
+            ref={slashMenuRef}
+            initial={{ opacity: 0, y: 12, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.96 }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+            className="absolute bottom-[calc(100%+8px)] left-2 sm:left-6 w-80 sm:w-96 p-1.5 rounded-2xl shadow-2xl backdrop-blur-2xl border border-zinc-800/90 bg-zinc-950/95 text-zinc-100 z-50 overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.7)]"
+          >
+            <div className="px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400 border-b border-zinc-800/80 mb-1 flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <Terminal size={12} className={isOsintMode ? "text-red-400" : "text-violet-400"} /> Available Commands
+              </span>
+              <span className="text-[9px] font-mono text-zinc-500">↑↓ to navigate · ↵ select</span>
+            </div>
+            <div className="space-y-1 relative">
+              {slashCommands.map((cmd, idx) => {
+                const isSelected = idx === slashSelectedIndex;
+                return (
+                  <button
+                    key={cmd.id}
+                    type="button"
+                    onClick={() => executeSlashCommand(cmd)}
+                    onMouseEnter={() => setSlashSelectedIndex(idx)}
+                    className="relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-left transition-colors duration-150 outline-none group"
+                  >
+                    {/* ANIMATED SELECTION BACKDROP */}
+                    {isSelected && (
+                      <motion.div
+                        layoutId="slashSelectionHighlight"
+                        initial={false}
+                        animate={{ opacity: 1 }}
+                        transition={{ type: "spring", stiffness: 450, damping: 35 }}
+                        className={clsx(
+                          "absolute inset-0 rounded-xl border z-0",
+                          isOsintMode
+                            ? "bg-red-950/70 border-red-800/70 shadow-[0_0_15px_rgba(136,8,8,0.3)]"
+                            : "bg-violet-900/40 border-violet-700/60 shadow-[0_0_15px_rgba(124,58,237,0.2)]"
+                        )}
+                      />
+                    )}
+
+                    <div className="relative z-10 p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 group-hover:scale-105 transition-transform duration-200">
+                      {cmd.icon}
+                    </div>
+
+                    <div className="relative z-10 flex-1 min-w-0">
+                      <div className="font-bold flex items-center gap-2">
+                        <span className={clsx("transition-colors", isSelected ? "text-white" : "text-zinc-300")}>{cmd.label}</span>
+                        {cmd.id === 'osint' && isOsintMode && (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] bg-red-800/80 text-red-200 font-mono">ACTIVE</span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-zinc-400 font-normal truncate">{cmd.description}</div>
+                    </div>
+
+                    {/* ANIMATED ARROW INDICATOR */}
+                    <AnimatePresence>
+                      {isSelected && (
+                        <motion.div
+                          initial={{ opacity: 0, x: -6 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: -6 }}
+                          transition={{ duration: 0.15 }}
+                          className="relative z-10"
+                        >
+                          <ChevronRight className={clsx("w-4 h-4", isOsintMode ? "text-red-400" : "text-violet-400")} />
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </button>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* DEDICATED THINKING MODE PROMPT INPUT CONTAINER */}
-      <div 
+      <div
         style={bgColor ? { backgroundColor: bgColor } : undefined}
         className={clsx(
-          "liquid-glass flex flex-col gap-1.5 p-2.5 sm:p-3.5 rounded-[24px] sm:rounded-[28px] transition-all duration-300 relative",
-          !bgColor && "bg-zinc-900/40",
-          disabled 
-            ? "opacity-60 grayscale shadow-none" 
-            : "focus-within:ring-2 focus-within:ring-violet-500/30"
+          "liquid-glass flex flex-col gap-1.5 p-2.5 sm:p-3.5 rounded-[24px] sm:rounded-[28px] transition-all duration-300 relative border",
+          !bgColor && (isOsintMode ? "bg-[#880808]/15 border-red-800/50 shadow-lg shadow-red-950/30" : "bg-zinc-900/40 border-transparent"),
+          disabled
+            ? "opacity-60 grayscale shadow-none"
+            : (isOsintMode ? "focus-within:ring-2 focus-within:ring-red-600/40" : "focus-within:ring-2 focus-within:ring-violet-500/30")
         )}
       >
-        
+
         {/* HEADER: ATTACHMENTS DISPLAY */}
         <AnimatePresence>
           {attachments.length > 0 && (
-            <motion.div 
+            <motion.div
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
               className="flex flex-wrap gap-2 px-1 pb-1 overflow-hidden"
             >
               {attachments.map((att, idx) => (
-                <motion.div 
-                  key={idx} 
+                <motion.div
+                  key={idx}
                   initial={{ scale: 0.85, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   exit={{ scale: 0.85, opacity: 0 }}
@@ -248,9 +408,9 @@ export function ThinkingChatInput({
           <textarea
             ref={textareaRef}
             value={value}
-            onChange={(e) => onChange(e.target.value)}
+            onChange={handleInputChange}
             onKeyDown={handleKeyDown}
-            placeholder="Ask Winky anything... (Thinking Mode)"
+            placeholder={isOsintMode ? "Ask HACKING mode... (Type / for commands)" : "Ask Winky anything... (Type / for commands)"}
             className="w-full max-h-36 min-h-[36px] py-1 bg-transparent resize-none focus:outline-none font-medium leading-relaxed text-xs sm:text-sm text-zinc-100 placeholder:text-zinc-500 selection:bg-violet-500/30 transition-colors duration-300"
             rows={1}
             disabled={disabled}
@@ -259,10 +419,10 @@ export function ThinkingChatInput({
 
         {/* FOOTER: TOOLBAR ACTIONS & SUBMIT */}
         <div className="flex items-center justify-between gap-2 pt-1 border-t border-zinc-800/40">
-          
+
           {/* LEFT: PROMPT INPUT TOOLS */}
           <div className="flex items-center gap-1.5 flex-wrap">
-            
+
             {/* 1. ACTION MENU (+) TRIGGER & DROPDOWN */}
             <div className="relative" ref={menuRef}>
               <button
@@ -328,8 +488,8 @@ export function ThinkingChatInput({
                 onClick={() => setShowTools(!showTools)}
                 className={clsx(
                   "flex items-center gap-2 px-3 py-1.5 rounded-2xl text-xs font-bold transition-all duration-300 active:scale-95 border",
-                  selectedTool 
-                    ? "bg-violet-600 text-white border-violet-500 shadow-md shadow-violet-500/20" 
+                  selectedTool
+                    ? "bg-violet-600 text-white border-violet-500 shadow-md shadow-violet-500/20"
                     : "bg-zinc-800/40 border-zinc-800 text-zinc-300 hover:bg-zinc-800"
                 )}
                 disabled={disabled}
@@ -343,7 +503,7 @@ export function ThinkingChatInput({
 
               <AnimatePresence>
                 {showTools && (
-                  <motion.div 
+                  <motion.div
                     initial={{ opacity: 0, y: 10, scale: 0.95 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 10, scale: 0.95 }}
@@ -372,8 +532,8 @@ export function ThinkingChatInput({
                           >
                             <div className={clsx(
                               "p-1.5 rounded-xl transition-colors",
-                              isSelected 
-                                ? "bg-white/20" 
+                              isSelected
+                                ? "bg-white/20"
                                 : "bg-zinc-800 group-hover/item:bg-zinc-700 text-zinc-300",
                               tool.color && !isSelected ? tool.color : ""
                             )}>
@@ -398,7 +558,12 @@ export function ThinkingChatInput({
               type="button"
               onClick={handleSend}
               disabled={disabled || (!value.trim() && attachments.length === 0)}
-              className="w-10 h-10 flex items-center justify-center rounded-full transition-all duration-300 shadow-lg disabled:opacity-30 disabled:scale-95 bg-gradient-to-tr from-violet-600 via-indigo-600 to-purple-600 text-white hover:shadow-violet-500/30 hover:scale-105 active:scale-95"
+              className={clsx(
+                "w-10 h-10 flex items-center justify-center rounded-full transition-all duration-300 shadow-lg disabled:opacity-30 disabled:scale-95 text-white hover:scale-105 active:scale-95",
+                isOsintMode
+                  ? "bg-gradient-to-tr from-red-900 via-red-700 to-rose-900 hover:shadow-red-900/50"
+                  : "bg-gradient-to-tr from-violet-600 via-indigo-600 to-purple-600 hover:shadow-violet-500/30"
+              )}
             >
               {disabled ? <Loader className="w-5 h-5 animate-spin" /> : <ArrowUp size={22} className="drop-shadow-md" />}
             </button>

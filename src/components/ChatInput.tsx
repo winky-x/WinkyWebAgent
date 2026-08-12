@@ -16,6 +16,8 @@ export interface ChatInputProps {
   attachments: Attachment[];
   setAttachments: React.Dispatch<React.SetStateAction<Attachment[]>>;
   bgColor?: string;
+  isOsintMode?: boolean;
+  onToggleOsintMode?: (active: boolean) => void;
 }
 
 export function ChatInput(props: ChatInputProps) {

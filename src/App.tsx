@@ -8,7 +8,7 @@ import { ChatInput } from '@/components/ChatInput';
 import { ChatMessage } from '@/components/ChatMessage';
 import { ChatSession, Attachment, GenerateOptions, Message, generateSpeechStream, PCMStreamPlayer } from '@/lib/gemini';
 import { LiveSession } from '@/lib/live';
-import { Sparkles, Volume2, BrainCircuit, ArrowRight, Zap, Trash2, AudioLines, SquareDashedMousePointer, Globe, Radio } from 'lucide-react';
+import { Sparkles, Volume2, Atom, ArrowRight, Zap, Trash2, AudioLines, SquareDashedMousePointer, Globe, Radio, Terminal, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion } from 'motion/react';
 import { executeKinematicsSequential, executeKinematicsSingle, pingESP32, KinematicsLogEntry } from './lib/robotManager';
@@ -130,6 +130,7 @@ export default function App() {
   const [inputText, setInputText] = useState('');
   const [isMuted, setIsMuted] = useState(false);
   const [selectedTool, setSelectedTool] = useState<string>('');
+  const [isOsintMode, setIsOsintMode] = useState<boolean>(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const pcmPlayerRef = useRef<PCMStreamPlayer | null>(null);
   // Robot Mode telemetry state
@@ -179,11 +180,11 @@ export default function App() {
         try {
           const encodedData = window.location.hash.slice('#attachments='.length);
           const parsed = JSON.parse(decodeURIComponent(encodedData));
-          
+
           incomingAttachments = parsed.map((att: any) => ({
             mimeType: att.mimeType,
             data: att.data, // base64 string
-            url: `data:${att.mimeType};base64,${att.data}` 
+            url: `data:${att.mimeType};base64,${att.data}`
           }));
         } catch (error) {
           console.error('Failed to parse incoming attachments from hash:', error);
@@ -231,7 +232,7 @@ export default function App() {
     };
 
     handleIncomingForward();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Robot Mode Startup + ESP32 Health Monitor
@@ -248,7 +249,7 @@ export default function App() {
         if (distanceCm !== undefined) setEsp32DistanceCm(distanceCm);
       });
       // Fire wakeup signal
-      fetch(`http://${ip}/api/wakeup`, { method: 'GET', mode: 'no-cors' }).catch(() => {});
+      fetch(`http://${ip}/api/wakeup`, { method: 'GET', mode: 'no-cors' }).catch(() => { });
       // Boot greeting
       setTimeout(() => {
         handleSend("System: You have just booted up. Look at your surroundings and greet the user autonomously.");
@@ -384,7 +385,7 @@ export default function App() {
 
   const stopSpeaking = () => {
     if (currentAudioSourceRef.current) {
-      try { currentAudioSourceRef.current.stop(); } catch (_) {}
+      try { currentAudioSourceRef.current.stop(); } catch (_) { }
       currentAudioSourceRef.current = null;
     }
     if (pcmPlayerRef.current) {
@@ -395,7 +396,7 @@ export default function App() {
       liveSessionRef.current.stopAudio();
     }
     setIsSpeaking(false);
-    
+
     // Force reset UI message trackers so new responses start in a fresh bubble
     currentAssistantMessageId.current = '';
     currentAssistantText.current = '';
@@ -500,27 +501,28 @@ export default function App() {
     pcmPlayerRef.current = freshPlayer;
     const orchestrator = new SpeechOrchestrator(freshPlayer);
 
-      try {
-        let resolvedModelId = 'gemini-2.5-flash-lite';
-        if (activeView === 'robot') {
-          resolvedModelId = 'gemini-2.5-flash-lite';
-        } else if (currentSelectedTool === 'fast_google_search') {
-          resolvedModelId = 'gemini-2.5-flash-lite';
-        } else if (currentSelectedTool === 'detailed_google_search') {
-          resolvedModelId = 'gemini-2.5-flash';
-        } else if (voiceMode) {
-          resolvedModelId = 'gemini-2.5-flash-lite';
-        } else {
-          resolvedModelId = 'gemini-3.1-flash-lite-preview';
-        }
+    try {
+      let resolvedModelId = 'gemini-2.5-flash-lite';
+      if (activeView === 'robot') {
+        resolvedModelId = 'gemini-2.5-flash-lite';
+      } else if (currentSelectedTool === 'fast_google_search') {
+        resolvedModelId = 'gemini-2.5-flash-lite';
+      } else if (currentSelectedTool === 'detailed_google_search') {
+        resolvedModelId = 'gemini-2.5-flash';
+      } else if (voiceMode) {
+        resolvedModelId = 'gemini-2.5-flash-lite';
+      } else {
+        resolvedModelId = 'gemini-3.1-flash-lite-preview';
+      }
 
-        const stream = chatSessionRef.current!.sendMessageStream(safeText, safeAttachments, {
-          voiceMode: activeView === 'robot' ? true : voiceMode,
-          isRobotMode: activeView === 'robot',
-          selectedTool: currentSelectedTool || '',
-          provider: 'google',
-          modelId: resolvedModelId
-        });
+      const stream = chatSessionRef.current!.sendMessageStream(safeText, safeAttachments, {
+        voiceMode: activeView === 'robot' ? true : voiceMode,
+        isRobotMode: activeView === 'robot',
+        isOsintMode: isOsintMode,
+        selectedTool: currentSelectedTool || '',
+        provider: 'google',
+        modelId: resolvedModelId
+      });
 
       let finalText = "";
       let finalThought = "";
@@ -682,38 +684,47 @@ export default function App() {
       {/* Ambient Animated Mesh Background for Thinking Mode */}
       {!voiceMode && activeView === 'chat' && (
         <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
-            animate={{ opacity: 0.5 }}
+            animate={{ opacity: isOsintMode ? 0.6 : 0.5 }}
             transition={{ duration: 1 }}
-            className="absolute -top-40 -left-40 w-[500px] h-[500px] bg-violet-600/20 rounded-full blur-[140px]"
+            className={`absolute -top-40 -left-40 w-[500px] h-[500px] rounded-full blur-[140px] ${isOsintMode ? 'bg-[#880808]/30' : 'bg-violet-600/20'}`}
           />
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
-            animate={{ opacity: 0.35 }}
+            animate={{ opacity: isOsintMode ? 0.4 : 0.35 }}
             transition={{ duration: 1, delay: 0.3 }}
-            className="absolute top-1/3 -right-40 w-[500px] h-[500px] bg-indigo-600/20 rounded-full blur-[140px]"
+            className={`absolute top-1/3 -right-40 w-[500px] h-[500px] rounded-full blur-[140px] ${isOsintMode ? 'bg-red-900/20' : 'bg-indigo-600/20'}`}
           />
           <div className="absolute inset-0 bg-[radial-gradient(#475569_1px,transparent_1px)] [background-size:24px_24px] opacity-10" />
         </div>
       )}
 
-      <header className={`flex flex-row items-center justify-between px-2 sm:px-6 py-2 sm:py-4 backdrop-blur-xl border-b sticky top-0 z-50 transition-colors duration-500 ${!voiceMode && activeView === 'chat' ? 'bg-zinc-900/80 border-zinc-800/80' : 'bg-white/70 border-zinc-200/50'}`}>
+      <header className={`flex flex-row items-center justify-between px-2 sm:px-6 py-2 sm:py-4 backdrop-blur-xl border-b sticky top-0 z-50 transition-colors duration-500 ${isOsintMode ? 'bg-zinc-950/90 border-red-900/40 shadow-lg shadow-red-950/20' : (!voiceMode && activeView === 'chat' ? 'bg-zinc-900/80 border-zinc-800/80' : 'bg-white/70 border-zinc-200/50')}`}>
         <div className="flex items-center gap-2 sm:gap-3">
-            <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center overflow-hidden shadow-sm transition-all duration-500 ${isSpeaking ? 'bg-emerald-500 ring-4 ring-emerald-50' : 'bg-none'}`}>
-              <img
-                src="/logo.png"
-                alt="Winky Logo"
-                className={`w-5 h-5 sm:w-6 sm:h-6 object-contain transition-transform duration-500 ${isSpeaking ? 'scale-110' : 'hover:scale-110'}`}
-              />
-            </div>
-            <div>
-              <h1 className={`text-base sm:text-xl font-bold tracking-tight font-display transition-colors duration-500 ${!voiceMode && activeView === 'chat' ? 'text-white' : 'text-zinc-900'}`}>Winky AI</h1>
-              <p className={`hidden sm:flex text-xs items-center gap-1 font-medium transition-colors duration-500 ${!voiceMode && activeView === 'chat' ? 'text-zinc-400' : 'text-zinc-500'}`}>
-                <Sparkles className="w-3 h-3 text-violet-400" />
-                {activeView === 'robot' ? 'IoT Platform Mode' : voiceMode ? 'Voice Mode Active' : 'Thinking Mode (Deep Cognitive Intelligence)'}
-              </p>
-            </div>
+          <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center overflow-hidden shadow-sm transition-all duration-500 ${isSpeaking ? 'bg-emerald-500 ring-4 ring-emerald-50' : (isOsintMode ? 'bg-red-950 border border-red-800/60 ring-2 ring-red-700/30' : 'bg-none')}`}>
+            <img
+              src="/logo.png"
+              alt="Winky Logo"
+              className={`w-5 h-5 sm:w-6 sm:h-6 object-contain transition-transform duration-500 ${isSpeaking ? 'scale-110' : 'hover:scale-110'}`}
+            />
+          </div>
+          <div>
+            <h1 className={`text-base sm:text-xl font-bold tracking-tight font-display transition-colors duration-500 ${!voiceMode && activeView === 'chat' ? 'text-white' : 'text-zinc-900'}`}>Winky AI</h1>
+            <p className={`hidden sm:flex text-xs items-center gap-1 font-medium transition-colors duration-500 ${!voiceMode && activeView === 'chat' ? 'text-zinc-400' : 'text-zinc-500'}`}>
+              {isOsintMode ? (
+                <span className="flex items-center gap-1.5 font-mono text-red-400 font-bold">
+                  <Terminal className="w-3 h-3 text-red-500 animate-pulse" />
+                  HACKING SYSTEM READY
+                </span>
+              ) : (
+                <>
+                  <Sparkles className="w-3 h-3 text-violet-400" />
+                  {activeView === 'robot' ? 'IoT Platform Mode' : voiceMode ? 'Voice Mode Active' : 'Thinking Mode (Deep Cognitive Intelligence)'}
+                </>
+              )}
+            </p>
+          </div>
         </div>
 
         {/* Global Nav Elements */}
@@ -759,7 +770,7 @@ export default function App() {
                 onClick={() => { setVoiceMode(false); stopSpeaking(); }}
                 className={`flex items-center gap-1 sm:gap-2 px-1.5 py-1 sm:px-4 sm:py-1.5 rounded-lg text-[10px] sm:text-sm font-semibold transition-all duration-300 ${!voiceMode ? 'bg-violet-600 text-white shadow-lg shadow-violet-500/30 ring-1 ring-violet-400/30' : 'text-zinc-500 hover:text-zinc-700'}`}
               >
-                <BrainCircuit className="w-3 h-3 sm:w-4 sm:h-4" />
+                <Atom className="w-3 h-3 sm:w-4 sm:h-4" />
                 <span className="inline">Think</span>
               </button>
             </div>
@@ -813,7 +824,7 @@ export default function App() {
                   {voiceMode ? (
                     <AudioLines className="w-8 h-8 sm:w-14 sm:h-14 animate-pulse text-zinc-900" />
                   ) : (
-                    <BrainCircuit className="w-8 h-8 sm:w-12 sm:h-12 animate-pulse text-violet-400" />
+                    <Atom className="w-8 h-8 sm:w-12 sm:h-12 animate-pulse text-violet-400" />
                   )}
                 </div>
                 <h2 className={`text-2xl sm:text-4xl font-bold mb-2 sm:mb-4 font-display tracking-tight transition-colors duration-500 ${!voiceMode ? 'text-white' : 'text-zinc-900'}`}>
@@ -858,8 +869,8 @@ export default function App() {
                         onMouseEnter={() => setHoveredCard(idx)}
                         className={`p-4 sm:p-6 rounded-3xl text-left transition-all duration-500 overflow-hidden relative border
                             ${!voiceMode
-                              ? 'bg-zinc-900/80 border-zinc-800/80 shadow-2xl text-white'
-                              : 'bg-white border-zinc-200/80 shadow-sm text-zinc-900'}
+                            ? 'bg-zinc-900/80 border-zinc-800/80 shadow-2xl text-white'
+                            : 'bg-white border-zinc-200/80 shadow-sm text-zinc-900'}
                             ${isHovered ? (!voiceMode ? 'shadow-violet-950/50 scale-[1.02] border-violet-500/60 ring-4 ring-violet-500/20 z-10' : 'shadow-xl scale-[1.02] border-violet-200 ring-4 ring-violet-50 z-10') : ''}
                             ${isOthersHovered ? 'opacity-50 scale-[0.98]' : ''}
                           `}
@@ -921,6 +932,18 @@ export default function App() {
                 onToolSelect={setSelectedTool}
                 attachments={attachments}
                 setAttachments={setAttachments}
+                isOsintMode={isOsintMode}
+                onToggleOsintMode={(active) => {
+                  setIsOsintMode(active);
+                  if (active) {
+                    setVoiceMode(false); // OSINT Security Mode forces dark thinking mode
+                    toast.success("HACKING SYSTEM READY", {
+                      description: "ENABLED Defensive Security Directives."
+                    });
+                  } else {
+                    toast.info("Standard Mode Restored");
+                  }
+                }}
               />
             </div>
           </div>

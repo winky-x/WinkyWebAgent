@@ -8,6 +8,7 @@ import { GoogleGenAI, ThinkingLevel, Content } from "@google/genai";
 import { toolDeclarations, executeTool } from "./tools";
 import { STANDARD_SYSTEM_INSTRUCTION, ROBOT_SYSTEM_INSTRUCTION } from "./prompt";
 import { THINKING_SYSTEM_INSTRUCTION } from "./thinkingPrompt";
+import { OSINT_SYSTEM_INSTRUCTION } from "./osintPrompt";
 
 // ============================================================================
 // Types & Interfaces
@@ -44,6 +45,7 @@ export interface StreamChunk {
 export interface GenerateOptions {
   voiceMode: boolean;
   isRobotMode: boolean;
+  isOsintMode?: boolean;
   selectedTool?: string;
   provider: 'google' | 'openrouter';
   modelId: string;
@@ -154,9 +156,16 @@ private async *handleGoogleStream(options: GenerateOptions): AsyncGenerator<Stre
     let accumulatedThought = "";
 
     while (!isDone) {
-      let baseInstruction = options.isRobotMode 
-        ? ROBOT_SYSTEM_INSTRUCTION 
-        : (!options.voiceMode ? THINKING_SYSTEM_INSTRUCTION : STANDARD_SYSTEM_INSTRUCTION);
+      let baseInstruction: string;
+      if (options.isOsintMode) {
+        baseInstruction = OSINT_SYSTEM_INSTRUCTION;
+      } else if (options.isRobotMode) {
+        baseInstruction = ROBOT_SYSTEM_INSTRUCTION;
+      } else if (!options.voiceMode) {
+        baseInstruction = THINKING_SYSTEM_INSTRUCTION;
+      } else {
+        baseInstruction = STANDARD_SYSTEM_INSTRUCTION;
+      }
 
       const selected = options.selectedTool || '';
 
@@ -200,7 +209,7 @@ private async *handleGoogleStream(options: GenerateOptions): AsyncGenerator<Stre
           };
         } else {
           config.thinkingConfig = { 
-            thinkingBudget: 2048,
+            thinkingBudget: 4096,
             includeThoughts: true 
           };
         }
